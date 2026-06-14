@@ -1,11 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import '../data/templates.dart';
 import 'gamification.dart';
 
-/// Ergebnis eines abgeschlossenen Workouts (fuer die Belohnungs-Anzeige).
+// Ergebnis eines abgeschlossenen Workouts (fuer die Belohnungs-Anzeige).
 class WorkoutResult {
   final int xpEarned;
   final List<String> prExercises;
@@ -22,14 +24,16 @@ class WorkoutResult {
   });
 }
 
-/// Zentraler App-Zustand (MVP: lokal im Speicher).
-/// Spaeter wird hier die Supabase-Sync-Schicht angedockt.
+// Zentraler App-Zustand. Wird lokal per shared_preferences gespeichert,
+// damit XP, Streak und Historie das Neuladen/Schliessen ueberleben.
 class AppState extends ChangeNotifier {
+  static const String _storeKey = 'newprime_state_v1';
+
   final Program program = Templates.upperLower4x;
 
   // Gamification-Zustand
-  int xp = 2600;
-  int streak = 12;
+  int xp = 0;
+  int streak = 0;
   DateTime? lastWorkoutDate;
 
   // Historie aller abgeschlossenen Saetze (Basis fuer Progression & PR).
@@ -40,22 +44,17 @@ class AppState extends ChangeNotifier {
   SessionTemplate? activeTemplate;
   List<ExerciseInstance> activeExercises = [];
 
-  AppState() {
-    lastWorkoutDate = DateTime.now().subtract(const Duration(days: 1));
-    _seedDemoHistory();
-  }
-
   int get level => LevelSystem.levelForXp(xp);
   double get levelProgress => LevelSystem.levelProgress(xp);
   int get xpIntoLevel => LevelSystem.xpIntoLevel(xp);
   int get xpForNextLevel => LevelSystem.xpForNextLevel(xp);
   AuraTier get auraTier => AuraTier.forStreak(streak);
 
-  /// Naechste geplante Session (rotiert durch Upper A/Lower A/Upper B/Lower B).
+  // Naechste geplante Session (rotiert durch Upper A/Lower A/Upper B/Lower B).
   SessionTemplate get nextSession =>
       program.sessions[logs.length % program.sessions.length];
 
-  /// Name -> Muskelgruppe (aus allen Programm-Uebungen).
+  // Name -> Muskelgruppe (aus allen Programm-Uebungen).
   Map<String, MuscleGroup> get _muscleByExercise {
     final map = <String, MuscleGroup>{};
     for (final session in program.sessions) {
@@ -66,7 +65,7 @@ class AppState extends ChangeNotifier {
     return map;
   }
 
-  /// Wochenvolumen (Tonnage) pro Muskelgruppe der letzten 7 Tage.
+  // Wochenvolumen (Tonnage) pro Muskelgruppe der letzten 7 Tage.
   Map<MuscleGroup, double> weeklyVolume() {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     final byName = _muscleByExercise;
@@ -80,15 +79,63 @@ class AppState extends ChangeNotifier {
     return map;
   }
 
+  // ---- Laden & Speichern (lokal) ----
+
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storeKey);
+    if (raw == null) {
+      // Erster Start: Demo-Daten, damit das Dashboard lebt.
+      _seedDemoHistory();
+      lastWorkoutDate = DateTime.now().subtract(const Duration(days: 1));
+      xp = 2600;
+      streak = 12;
+      await save();
+      notifyListeners();
+      return;
+    }
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      xp = data['xp'] as int? ?? 0;
+      streak = data['streak'] as int? ?? 0;
+      final lwd = data['lastWorkoutDate'] as String?;
+      lastWorkoutDate = lwd != null ? DateTime.tryParse(lwd) : null;
+      history
+        ..clear()
+        ..addAll((data['history'] as List? ?? [])
+            .map((e) => CompletedSet.fromJson(e as Map<String, dynamic>)));
+      logs
+        ..clear()
+        ..addAll((data['logs'] as List? ?? [])
+            .map((e) => WorkoutLog.fromJson(e as Map<String, dynamic>)));
+    } catch (_) {
+      // Beschaedigte Daten -> sauberer Neustart mit Demo.
+      _seedDemoHistory();
+      xp = 2600;
+      streak = 12;
+      lastWorkoutDate = DateTime.now().subtract(const Duration(days: 1));
+    }
+    notifyListeners();
+  }
+
+  Future<void> save() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = {
+      'xp': xp,
+      'streak': streak,
+      'lastWorkoutDate': lastWorkoutDate?.toIso8601String(),
+      'history': history.map((e) => e.toJson()).toList(),
+      'logs': logs.map((e) => e.toJson()).toList(),
+    };
+    await prefs.setString(_storeKey, jsonEncode(data));
+  }
+
   // ---- Session-Ablauf ----
 
   void startSession(SessionTemplate template) {
     activeTemplate = template;
     activeExercises = template.exercises.map((ex) {
-      final sets = List.generate(
-        ex.targetSets,
-        (_) => SetEntry(),
-      );
+      final sets = List.generate(ex.targetSets, (_) => SetEntry());
       return ExerciseInstance(template: ex, sets: sets);
     }).toList();
     notifyListeners();
@@ -104,7 +151,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Satz als erledigt markieren -> Mikro-Reward (Haptik) + sofort sichtbar.
+  // Satz als erledigt markieren -> Mikro-Reward (Haptik) + sofort sichtbar.
   void toggleSetDone(int exerciseIndex, int setIndex) {
     final set = activeExercises[exerciseIndex].sets[setIndex];
     set.done = !set.done;
@@ -136,7 +183,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Progression-Vorschlag fuer eine Uebung (Double Progression).
+  // Progression-Vorschlag fuer eine Uebung (Double Progression).
   ProgressionSuggestion? suggestionFor(ExerciseTemplate ex) {
     final last = _lastWorkingSetsFor(ex.name);
     return Progression.suggest(last, ex.repMin, ex.repMax);
@@ -148,15 +195,15 @@ class AppState extends ChangeNotifier {
         .toList();
     if (relevant.isEmpty) return [];
     relevant.sort((a, b) => b.date.compareTo(a.date));
-    final latestDay = DateTime(
-        relevant.first.date.year, relevant.first.date.month, relevant.first.date.day);
+    final latestDay = DateTime(relevant.first.date.year,
+        relevant.first.date.month, relevant.first.date.day);
     return relevant.where((s) {
       final d = DateTime(s.date.year, s.date.month, s.date.day);
       return d == latestDay;
     }).toList();
   }
 
-  /// Workout abschliessen: XP, Streak, PR-Erkennung, Historie schreiben.
+  // Workout abschliessen: XP, Streak, PR-Erkennung, Historie schreiben, speichern.
   WorkoutResult finishWorkout() {
     final now = DateTime.now();
     final completed = <CompletedSet>[];
@@ -223,11 +270,12 @@ class AppState extends ChangeNotifier {
       newLevel: level,
       streak: streak,
     );
+    save(); // lokal sichern (Fire-and-forget)
     notifyListeners();
     return result;
   }
 
-  // ---- Demo-Daten, damit das Dashboard sofort lebt ----
+  // ---- Demo-Daten, damit das Dashboard beim ersten Start lebt ----
   void _seedDemoHistory() {
     final past = DateTime.now().subtract(const Duration(days: 3));
     history.addAll([
