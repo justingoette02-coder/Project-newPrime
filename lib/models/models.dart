@@ -1,5 +1,5 @@
-/// Kern-Datenmodelle fuer Project newPrime.
-/// Hierarchie: Program -> SessionTemplate -> ExerciseInstance -> SetEntry
+// Kern-Datenmodelle fuer Project newPrime.
+// Hierarchie: Program -> SessionTemplate -> ExerciseInstance -> SetEntry
 
 enum MuscleGroup {
   chest,
@@ -41,8 +41,8 @@ extension MuscleGroupLabel on MuscleGroup {
   }
 }
 
-/// Eine Uebung als Vorlage. Wiederholungsbereich ist je Uebung individuell
-/// (gemischt: schwer bei Grunduebungen, leichter bei Isolation).
+// Eine Uebung als Vorlage. Wiederholungsbereich ist je Uebung individuell
+// (gemischt: schwer bei Grunduebungen, leichter bei Isolation).
 class ExerciseTemplate {
   final String name;
   final MuscleGroup muscle;
@@ -59,7 +59,7 @@ class ExerciseTemplate {
   });
 }
 
-/// Ein einzelner Satz — die Kern-Einheit des Trackings.
+// Ein einzelner Satz — die Kern-Einheit des Trackings.
 class SetEntry {
   double? weight; // kg
   int? reps;
@@ -81,14 +81,14 @@ class SetEntry {
     this.done = false,
   });
 
-  /// Tonnage dieses Satzes (zaehlt nur bei Arbeitssaetzen).
+  // Tonnage dieses Satzes (zaehlt nur bei Arbeitssaetzen).
   double get volume {
     if (isWarmup || weight == null || reps == null) return 0;
     return weight! * reps!;
   }
 }
 
-/// Eine Uebung innerhalb einer laufenden Session, inkl. der geloggten Saetze.
+// Eine Uebung innerhalb einer laufenden Session, inkl. der geloggten Saetze.
 class ExerciseInstance {
   final ExerciseTemplate template;
   final List<SetEntry> sets;
@@ -99,7 +99,7 @@ class ExerciseInstance {
   String get name => template.name;
 }
 
-/// Ein Trainingstag als Vorlage (z.B. "Upper A").
+// Ein Trainingstag als Vorlage (z.B. "Upper A").
 class SessionTemplate {
   final String name;
   final List<ExerciseTemplate> exercises;
@@ -107,7 +107,7 @@ class SessionTemplate {
   const SessionTemplate({required this.name, required this.exercises});
 }
 
-/// Ein vollstaendiges Programm (Split).
+// Ein vollstaendiges Programm (Split).
 class Program {
   final String name;
   final List<SessionTemplate> sessions;
@@ -115,7 +115,7 @@ class Program {
   const Program({required this.name, required this.sessions});
 }
 
-/// Ein abgeschlossener Satz fuer die Historie (Basis fuer Progression & PR).
+// Ein abgeschlossener Satz fuer die Historie (Basis fuer Progression & PR).
 class CompletedSet {
   final String exerciseName;
   final double weight;
@@ -135,11 +135,11 @@ class CompletedSet {
 
   double get volume => isWarmup ? 0 : weight * reps;
 
-  /// Geschaetztes 1RM (Epley-Formel) — fuer PR-Vergleich.
+  // Geschaetztes 1RM (Epley-Formel) — fuer PR-Vergleich.
   double get estimated1RM => weight * (1 + reps / 30.0);
 }
 
-/// Ein abgeschlossenes Workout fuer die Historie.
+// Ein abgeschlossenes Workout fuer die Historie.
 class WorkoutLog {
   final String sessionName;
   final DateTime date;
@@ -153,6 +153,5 @@ class WorkoutLog {
     required this.xpEarned,
   });
 
-  double get totalVolume =>
-      sets.fold(0.0, (sum, s) => sum + s.volume);
+  double get totalVolume => sets.fold(0.0, (sum, s) => sum + s.volume);
 }

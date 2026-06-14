@@ -51,8 +51,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(template.name,
-            style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         actions: [
           TextButton(
             onPressed: () => _finish(context, state),
@@ -103,7 +102,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary)),
               ),
-              Text('Ziel ${ex.template.targetSets} x '
+              Text(
+                  'Ziel ${ex.template.targetSets} x '
                   '${ex.template.repMin}-${ex.template.repMax}',
                   style: const TextStyle(
                       fontSize: 12, color: AppColors.textTertiary)),
@@ -140,8 +140,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               displayNumber: working,
               set: set,
               onChanged: ({double? weight, int? reps, double? rpe}) {
-                state.updateSet(ei, si,
-                    weight: weight, reps: reps, rpe: rpe);
+                state.updateSet(ei, si, weight: weight, reps: reps, rpe: rpe);
               },
               onToggleDone: () {
                 state.toggleSetDone(ei, si);
@@ -159,15 +158,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 onPressed: () => state.addSet(ei),
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Satz'),
-                style: TextButton.styleFrom(
-                    foregroundColor: AppColors.aura),
+                style: TextButton.styleFrom(foregroundColor: AppColors.aura),
               ),
               TextButton.icon(
                 onPressed: () => state.addSet(ei, warmup: true),
                 icon: const Icon(Icons.whatshot, size: 16),
                 label: const Text('Aufwaermen'),
-                style: TextButton.styleFrom(
-                    foregroundColor: AppColors.streak),
+                style: TextButton.styleFrom(foregroundColor: AppColors.streak),
               ),
             ],
           ),
@@ -184,8 +181,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       color: AppColors.surface,
       child: Row(
         children: [
-          const Icon(Icons.timer_outlined,
-              size: 18, color: AppColors.streak),
+          const Icon(Icons.timer_outlined, size: 18, color: AppColors.streak),
           const SizedBox(width: 8),
           Text('Pause  $m:$s',
               style: const TextStyle(
@@ -207,13 +203,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   void _finish(BuildContext context, AppState state) {
+    // Navigator vorab erfassen, damit context nicht ueber den async-Gap genutzt wird.
+    final navigator = Navigator.of(context);
+    final tierIndex = state.auraTier.index;
     final result = state.finishWorkout();
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _ResultDialog(result: result, tierIndex: state.auraTier.index),
+      builder: (ctx) => _ResultDialog(result: result, tierIndex: tierIndex),
     ).then((_) {
-      if (mounted) Navigator.of(context).pop();
+      navigator.pop();
     });
   }
 }
@@ -229,8 +228,7 @@ class _ResultDialog extends StatelessWidget {
     final color = AuraOrb.colorForTier(tierIndex);
     return Dialog(
       backgroundColor: AppColors.surface,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

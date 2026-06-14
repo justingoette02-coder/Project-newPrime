@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/gamification.dart';
 
-/// Platzhalter fuer die animierten Aura-Augen (spaeter Rive-Asset).
-/// Zeigt einen pulsierenden Aura-Ring in der Farbe der aktuellen Stufe,
-/// mit der Level-Zahl im Zentrum. Aura wird mit hoeherer Stufe "lauter".
+// Platzhalter fuer die animierten Aura-Augen (spaeter Rive-Asset).
+// Zeigt einen pulsierenden Aura-Ring in der Farbe der aktuellen Stufe,
+// mit der Level-Zahl im Zentrum. Aura wird mit hoeherer Stufe "lauter".
 class AuraOrb extends StatefulWidget {
   final AuraTier tier;
   final int level;
@@ -68,7 +68,8 @@ class _AuraOrbState extends State<AuraOrb> with SingleTickerProviderStateMixin {
       animation: _c,
       builder: (context, child) {
         final t = _c.value;
-        final glowRadius = widget.size * (0.5 + 0.35 * intensity) * (0.85 + 0.3 * t);
+        final glowRadius =
+            widget.size * (0.5 + 0.35 * intensity) * (0.85 + 0.3 * t);
         final glowOpacity =
             (widget.dimmed ? 0.12 : (0.25 + 0.45 * intensity)) * (0.7 + 0.3 * t);
         return SizedBox(
@@ -87,7 +88,7 @@ class _AuraOrbState extends State<AuraOrb> with SingleTickerProviderStateMixin {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: color.withOpacity(glowOpacity),
+                    color: color.withAlpha((glowOpacity * 255).round()),
                     blurRadius: glowRadius,
                     spreadRadius: glowRadius * 0.25,
                   ),
