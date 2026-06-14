@@ -1,0 +1,34 @@
+name: newPrime CI
+
+# Kompiliert die App automatisch bei jedem Hochladen (Push) und bei Pull Requests.
+# Gruener Haken = Code kompiliert. Roter Haken = Fehler (Logs im Actions-Tab).
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Plattform-Dateien (web) erzeugen
+        run: flutter create --platforms=web .
+
+      - name: Pakete laden
+        run: flutter pub get
+
+      - name: Analyse (findet Typ- und Syntaxfehler)
+        run: flutter analyze
+
+      - name: Web-Build (echter Kompiliertest, kein Handy noetig)
+        run: flutter build web --release

@@ -1,0 +1,20 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# Von 'flutter create' erzeugte Plattform-Ordner (CI erzeugt sie neu)
+/android/
+/ios/
+/web/
+/linux/
+/macos/
+/windows/
+
+# IDE
+.idea/
+.vscode/
+*.iml
