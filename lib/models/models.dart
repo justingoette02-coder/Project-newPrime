@@ -137,6 +137,24 @@ class CompletedSet {
 
   // Geschaetztes 1RM (Epley-Formel) — fuer PR-Vergleich.
   double get estimated1RM => weight * (1 + reps / 30.0);
+
+  Map<String, dynamic> toJson() => {
+        'exerciseName': exerciseName,
+        'weight': weight,
+        'reps': reps,
+        'rpe': rpe,
+        'date': date.toIso8601String(),
+        'isWarmup': isWarmup,
+      };
+
+  factory CompletedSet.fromJson(Map<String, dynamic> j) => CompletedSet(
+        exerciseName: j['exerciseName'] as String,
+        weight: (j['weight'] as num).toDouble(),
+        reps: j['reps'] as int,
+        rpe: (j['rpe'] as num?)?.toDouble(),
+        date: DateTime.parse(j['date'] as String),
+        isWarmup: j['isWarmup'] as bool? ?? false,
+      );
 }
 
 // Ein abgeschlossenes Workout fuer die Historie.
@@ -154,4 +172,20 @@ class WorkoutLog {
   });
 
   double get totalVolume => sets.fold(0.0, (sum, s) => sum + s.volume);
+
+  Map<String, dynamic> toJson() => {
+        'sessionName': sessionName,
+        'date': date.toIso8601String(),
+        'xpEarned': xpEarned,
+        'sets': sets.map((s) => s.toJson()).toList(),
+      };
+
+  factory WorkoutLog.fromJson(Map<String, dynamic> j) => WorkoutLog(
+        sessionName: j['sessionName'] as String,
+        date: DateTime.parse(j['date'] as String),
+        xpEarned: j['xpEarned'] as int? ?? 0,
+        sets: (j['sets'] as List)
+            .map((e) => CompletedSet.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
 }
