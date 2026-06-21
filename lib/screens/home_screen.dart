@@ -6,7 +6,6 @@ import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../widgets/aura_orb.dart';
 import 'workout_screen.dart';
-import 'history_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -21,9 +20,9 @@ class HomeScreen extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
-                _topBar(context),
+                _topBar(),
                 const SizedBox(height: 8),
-                _heroAura(context, state, tier),
+                _heroAura(state, tier),
                 const SizedBox(height: 20),
                 _xpBar(state),
                 const SizedBox(height: 20),
@@ -40,41 +39,25 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _topBar(BuildContext context) {
+  Widget _topBar() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text('newPRIME',
+      children: const [
+        Text('newPRIME',
             style: TextStyle(
                 fontSize: 13,
                 letterSpacing: 3,
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w500)),
-        Row(
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const HistoryScreen())),
-              child: const Icon(Icons.history,
-                  size: 20, color: AppColors.textSecondary),
-            ),
-            const SizedBox(width: 12),
-            const Icon(Icons.bolt, size: 18, color: AppColors.textSecondary),
-          ],
-        ),
+        Icon(Icons.bolt, size: 18, color: AppColors.textSecondary),
       ],
     );
   }
 
-  Widget _heroAura(BuildContext context, AppState state, tier) {
+  Widget _heroAura(AppState state, tier) {
     return Row(
       children: [
-        AuraOrb(
-            tier: tier,
-            level: state.level,
-            size: 68,
-            dimmed: state.isStreakAtRisk),
-        const SizedBox(width: 14),
+        AuraOrb(tier: tier, level: state.level, size: 68),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,21 +77,11 @@ class HomeScreen extends StatelessWidget {
                         color: AppColors.bg)),
               ),
               const SizedBox(height: 6),
-              GestureDetector(
-                onTap: () => _editName(context, state),
-                child: Row(
-                  children: [
-                    Text(state.displayName,
-                        style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary)),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.edit,
-                        size: 13, color: AppColors.textTertiary),
-                  ],
-                ),
-              ),
+              Text('Justin',
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
               const SizedBox(height: 2),
               Text('Level ${state.level} · ${tier.name}',
                   style: const TextStyle(
@@ -117,47 +90,6 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  void _editName(BuildContext context, AppState state) {
-    final c = TextEditingController(text: state.displayName);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Name ändern',
-            style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary)),
-        content: TextField(
-          controller: c,
-          autofocus: true,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: AppColors.border)),
-            focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: AppColors.aura)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Abbrechen',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () {
-              state.setDisplayName(c.text.trim());
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Speichern',
-                style: TextStyle(color: AppColors.aura)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -199,16 +131,6 @@ class HomeScreen extends StatelessWidget {
             value: '${state.streak}',
             suffix: ' Tage',
             color: AppColors.streak,
-            badge: state.shields > 0
-                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.shield,
-                        size: 11, color: AppColors.textTertiary),
-                    const SizedBox(width: 2),
-                    Text('${state.shields}',
-                        style: const TextStyle(
-                            fontSize: 10, color: AppColors.textTertiary)),
-                  ])
-                : null,
           ),
         ),
         const SizedBox(width: 12),
@@ -230,7 +152,6 @@ class HomeScreen extends StatelessWidget {
     required String value,
     String suffix = '',
     required Color color,
-    Widget? badge,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -246,10 +167,6 @@ class HomeScreen extends StatelessWidget {
             Icon(icon, size: 13, color: AppColors.textTertiary),
             const SizedBox(width: 4),
             Text(label, style: AppTheme.label),
-            if (badge != null) ...[
-              const Spacer(),
-              badge,
-            ],
           ]),
           const SizedBox(height: 4),
           RichText(
