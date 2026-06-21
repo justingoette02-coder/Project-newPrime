@@ -14,7 +14,6 @@ class WorkoutResult {
   final bool leveledUp;
   final int newLevel;
   final int streak;
-  final int? durationMinutes;
 
   WorkoutResult({
     required this.xpEarned,
@@ -22,7 +21,6 @@ class WorkoutResult {
     required this.leveledUp,
     required this.newLevel,
     required this.streak,
-    this.durationMinutes,
   });
 }
 
@@ -36,12 +34,7 @@ class AppState extends ChangeNotifier {
   // Gamification-Zustand
   int xp = 0;
   int streak = 0;
-  int shields = 1;
   DateTime? lastWorkoutDate;
-  String displayName = 'Athlet';
-
-  // Benutzerdefinierte Pausenzeiten pro Uebungsname (ueberschreibt den Standardwert).
-  final Map<String, int> _restOverrides = {};
 
   // Historie aller abgeschlossenen Saetze (Basis fuer Progression & PR).
   final List<CompletedSet> history = [];
@@ -50,24 +43,12 @@ class AppState extends ChangeNotifier {
   // Laufende Session
   SessionTemplate? activeTemplate;
   List<ExerciseInstance> activeExercises = [];
-  DateTime? _sessionStart;
 
   int get level => LevelSystem.levelForXp(xp);
   double get levelProgress => LevelSystem.levelProgress(xp);
   int get xpIntoLevel => LevelSystem.xpIntoLevel(xp);
   int get xpForNextLevel => LevelSystem.xpForNextLevel(xp);
   AuraTier get auraTier => AuraTier.forStreak(streak);
-
-  // true, wenn seit dem letzten Workout >= 2 Tage vergangen sind.
-  bool get isStreakAtRisk {
-    if (lastWorkoutDate == null) return false;
-    final today = DateTime.now();
-    final diff = DateTime(today.year, today.month, today.day)
-        .difference(DateTime(lastWorkoutDate!.year, lastWorkoutDate!.month,
-            lastWorkoutDate!.day))
-        .inDays;
-    return diff >= 2;
-  }
 
   // Naechste geplante Session (rotiert durch Upper A/Lower A/Upper B/Lower B).
   SessionTemplate get nextSession =>
@@ -98,29 +79,6 @@ class AppState extends ChangeNotifier {
     return map;
   }
 
-  // Konfigurierte Pausenzeit fuer eine Uebung (Custom-Wert oder Standardwert).
-  int restFor(ExerciseTemplate ex) =>
-      _restOverrides[ex.name] ?? RestDefaults.forExercise(ex);
-
-  // Pausenzeit fuer eine Uebung speichern.
-  void setRestOverride(String exerciseName, int seconds) {
-    _restOverrides[exerciseName] = seconds;
-    save();
-    notifyListeners();
-  }
-
-  // Benutzernamen aendern.
-  void setDisplayName(String name) {
-    if (name.isEmpty) return;
-    displayName = name;
-    save();
-    notifyListeners();
-  }
-
-  // Letzte Arbeitssaetze einer Uebung (public, fuer Inline-History im Workout).
-  List<CompletedSet> lastWorkingSetsFor(String exerciseName) =>
-      _lastWorkingSetsFor(exerciseName);
-
   // ---- Laden & Speichern (lokal) ----
 
   Future<void> load() async {
@@ -140,8 +98,6 @@ class AppState extends ChangeNotifier {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       xp = data['xp'] as int? ?? 0;
       streak = data['streak'] as int? ?? 0;
-      shields = data['shields'] as int? ?? 1;
-      displayName = data['displayName'] as String? ?? 'Athlet';
       final lwd = data['lastWorkoutDate'] as String?;
       lastWorkoutDate = lwd != null ? DateTime.tryParse(lwd) : null;
       history
@@ -152,17 +108,11 @@ class AppState extends ChangeNotifier {
         ..clear()
         ..addAll((data['logs'] as List? ?? [])
             .map((e) => WorkoutLog.fromJson(e as Map<String, dynamic>)));
-      final ro = data['restOverrides'] as Map<String, dynamic>? ?? {};
-      _restOverrides
-        ..clear()
-        ..addAll(ro.map((k, v) => MapEntry(k, v as int)));
     } catch (_) {
       // Beschaedigte Daten -> sauberer Neustart mit Demo.
       _seedDemoHistory();
       xp = 2600;
       streak = 12;
-      shields = 1;
-      displayName = 'Athlet';
       lastWorkoutDate = DateTime.now().subtract(const Duration(days: 1));
     }
     notifyListeners();
@@ -173,10 +123,7 @@ class AppState extends ChangeNotifier {
     final data = {
       'xp': xp,
       'streak': streak,
-      'shields': shields,
-      'displayName': displayName,
       'lastWorkoutDate': lastWorkoutDate?.toIso8601String(),
-      'restOverrides': _restOverrides,
       'history': history.map((e) => e.toJson()).toList(),
       'logs': logs.map((e) => e.toJson()).toList(),
     };
@@ -186,34 +133,16 @@ class AppState extends ChangeNotifier {
   // ---- Session-Ablauf ----
 
   void startSession(SessionTemplate template) {
-    _sessionStart = DateTime.now();
     activeTemplate = template;
     activeExercises = template.exercises.map((ex) {
-      final lastSets = _lastWorkingSetsFor(ex.name);
-      final sets = List.generate(ex.targetSets, (i) {
-        final prev = i < lastSets.length ? lastSets[i] : null;
-        return SetEntry(
-          weight: prev?.weight,
-          reps: prev?.reps,
-        );
-      });
+      final sets = List.generate(ex.targetSets, (_) => SetEntry());
       return ExerciseInstance(template: ex, sets: sets);
     }).toList();
     notifyListeners();
   }
 
   void addSet(int exerciseIndex, {bool warmup = false}) {
-    final ex = activeExercises[exerciseIndex];
-    // Letzten Arbeitssatz als Vorlage fuer den neuen Satz verwenden.
-    final lastWorking = ex.sets.lastWhere(
-      (s) => !s.isWarmup,
-      orElse: () => SetEntry(),
-    );
-    activeExercises[exerciseIndex].sets.add(SetEntry(
-      isWarmup: warmup,
-      weight: warmup ? null : lastWorking.weight,
-      reps: warmup ? null : lastWorking.reps,
-    ));
+    activeExercises[exerciseIndex].sets.add(SetEntry(isWarmup: warmup));
     notifyListeners();
   }
 
@@ -277,11 +206,6 @@ class AppState extends ChangeNotifier {
   // Workout abschliessen: XP, Streak, PR-Erkennung, Historie schreiben, speichern.
   WorkoutResult finishWorkout() {
     final now = DateTime.now();
-    final durationMinutes = _sessionStart != null
-        ? now.difference(_sessionStart!).inMinutes
-        : null;
-    _sessionStart = null;
-
     final completed = <CompletedSet>[];
     final prs = <String>[];
     int xpEarned = 0;
@@ -309,11 +233,8 @@ class AppState extends ChangeNotifier {
     final beforeLevel = level;
     xp += xpEarned;
 
-    // Trainings-Streak mit Shield-System:
-    // - Gleicher Tag: unveraendert
-    // - <= 3 Tage Pause: Streak erhoehen
-    // - > 3 Tage Pause, Schild vorhanden: Schild verbrauchen, Streak erhoehen
-    // - > 3 Tage Pause, kein Schild: Reset auf 1
+    // Trainings-Streak: bleibt erhalten bei regelmaessigem Training
+    // (max 3 Tage Pause), sonst Reset.
     if (lastWorkoutDate != null) {
       final days = DateTime(now.year, now.month, now.day)
           .difference(DateTime(lastWorkoutDate!.year, lastWorkoutDate!.month,
@@ -322,9 +243,6 @@ class AppState extends ChangeNotifier {
       if (days == 0) {
         // zweites Workout am selben Tag — Streak unveraendert
       } else if (days <= 3) {
-        streak++;
-      } else if (shields > 0) {
-        shields--;
         streak++;
       } else {
         streak = 1;
@@ -340,7 +258,6 @@ class AppState extends ChangeNotifier {
       date: now,
       sets: completed,
       xpEarned: xpEarned,
-      durationMinutes: durationMinutes,
     ));
 
     activeTemplate = null;
@@ -352,7 +269,6 @@ class AppState extends ChangeNotifier {
       leveledUp: level > beforeLevel,
       newLevel: level,
       streak: streak,
-      durationMinutes: durationMinutes,
     );
     save(); // lokal sichern (Fire-and-forget)
     notifyListeners();

@@ -129,15 +129,6 @@ class Progression {
       v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 }
 
-/// Standardpause pro Uebung basierend auf dem Rep-Bereich.
-class RestDefaults {
-  static int forExercise(ExerciseTemplate ex) {
-    if (ex.repMax <= 8) return 180; // schwere Grunduebung
-    if (ex.repMax <= 12) return 120; // mittlere Verbunduebung
-    return 60; // Isolation
-  }
-}
-
 /// PR-Erkennung ueber geschaetztes 1RM pro Uebung.
 class PRChecker {
   /// true, wenn [candidate] das bisher beste geschaetzte 1RM dieser Uebung
