@@ -210,12 +210,14 @@ class WorkoutLog {
   final DateTime date;
   final List<CompletedSet> sets;
   final int xpEarned;
+  final int? durationMinutes;
 
   WorkoutLog({
     required this.sessionName,
     required this.date,
     required this.sets,
     required this.xpEarned,
+    this.durationMinutes,
   });
 
   double get totalVolume => sets.fold(0.0, (sum, s) => sum + s.volume);
@@ -224,6 +226,7 @@ class WorkoutLog {
         'sessionName': sessionName,
         'date': date.toIso8601String(),
         'xpEarned': xpEarned,
+        'durationMinutes': durationMinutes,
         'sets': sets.map((s) => s.toJson()).toList(),
       };
 
@@ -231,6 +234,7 @@ class WorkoutLog {
         sessionName: j['sessionName'] as String,
         date: DateTime.parse(j['date'] as String),
         xpEarned: j['xpEarned'] as int? ?? 0,
+        durationMinutes: j['durationMinutes'] as int?,
         sets: (j['sets'] as List)
             .map((e) => CompletedSet.fromJson(e as Map<String, dynamic>))
             .toList(),
