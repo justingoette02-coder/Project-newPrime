@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../widgets/set_row.dart';
 import '../widgets/aura_orb.dart';
+import '../widgets/exercise_form_dialog.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -68,9 +69,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              itemCount: exercises.length,
-              itemBuilder: (context, ei) =>
-                  _exerciseCard(context, state, ei, exercises[ei]),
+              itemCount: exercises.length + 1,
+              itemBuilder: (context, ei) {
+                if (ei == exercises.length) {
+                  return _addExerciseButton(context, state);
+                }
+                return _exerciseCard(context, state, ei, exercises[ei]);
+              },
             ),
           ),
           if (_rest > 0) _restBar(context, state),
@@ -182,6 +187,27 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // Button am Listenende: spontan eine Uebung zur Session hinzufuegen.
+  Widget _addExerciseButton(BuildContext context, AppState state) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          final ex = await showExerciseFormDialog(context);
+          if (ex != null) state.addExerciseToActiveSession(ex);
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Uebung hinzufuegen'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.aura,
+          side: const BorderSide(color: AppColors.borderAura),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          minimumSize: const Size(double.infinity, 0),
+        ),
       ),
     );
   }

@@ -57,6 +57,22 @@ class ExerciseTemplate {
     required this.repMax,
     this.targetSets = 3,
   });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'muscle': muscle.name,
+        'repMin': repMin,
+        'repMax': repMax,
+        'targetSets': targetSets,
+      };
+
+  factory ExerciseTemplate.fromJson(Map<String, dynamic> j) => ExerciseTemplate(
+        name: j['name'] as String,
+        muscle: MuscleGroup.values.byName(j['muscle'] as String),
+        repMin: j['repMin'] as int,
+        repMax: j['repMax'] as int,
+        targetSets: j['targetSets'] as int? ?? 3,
+      );
 }
 
 // Ein einzelner Satz — die Kern-Einheit des Trackings.
@@ -105,14 +121,45 @@ class SessionTemplate {
   final List<ExerciseTemplate> exercises;
 
   const SessionTemplate({required this.name, required this.exercises});
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'exercises': exercises.map((e) => e.toJson()).toList(),
+      };
+
+  factory SessionTemplate.fromJson(Map<String, dynamic> j) => SessionTemplate(
+        name: j['name'] as String,
+        exercises: (j['exercises'] as List)
+            .map((e) => ExerciseTemplate.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 // Ein vollstaendiges Programm (Split).
 class Program {
   final String name;
   final List<SessionTemplate> sessions;
+  final bool isCustom; // true = vom Nutzer erstellt (editier-/loeschbar)
 
-  const Program({required this.name, required this.sessions});
+  const Program({
+    required this.name,
+    required this.sessions,
+    this.isCustom = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'isCustom': isCustom,
+        'sessions': sessions.map((s) => s.toJson()).toList(),
+      };
+
+  factory Program.fromJson(Map<String, dynamic> j) => Program(
+        name: j['name'] as String,
+        isCustom: j['isCustom'] as bool? ?? true,
+        sessions: (j['sessions'] as List)
+            .map((s) => SessionTemplate.fromJson(s as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 // Ein abgeschlossener Satz fuer die Historie (Basis fuer Progression & PR).

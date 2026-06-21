@@ -31,7 +31,23 @@ class WorkoutResult {
 class AppState extends ChangeNotifier {
   static const String _storeKey = 'newprime_state_v1';
 
-  final Program program = Templates.upperLower4x;
+  // Vorgeschlagene (built-in) Programme + eigene (vom Nutzer erstellte).
+  List<Program> get suggestedPrograms => Templates.suggested;
+  final List<Program> customPrograms = [];
+  String? selectedProgramName;
+
+  List<Program> get allPrograms => [...suggestedPrograms, ...customPrograms];
+
+  // Aktuell gewaehltes Programm (Fallback: erstes vorgeschlagenes).
+  Program get activeProgram {
+    final name = selectedProgramName;
+    if (name != null) {
+      for (final p in allPrograms) {
+        if (p.name == name) return p;
+      }
+    }
+    return suggestedPrograms.first;
+  }
 
   // Gamification-Zustand
   int xp = 0;
@@ -69,16 +85,18 @@ class AppState extends ChangeNotifier {
     return diff >= 2;
   }
 
-  // Naechste geplante Session (rotiert durch Upper A/Lower A/Upper B/Lower B).
+  // Naechste geplante Session des aktiven Programms (chronologisch rotierend).
   SessionTemplate get nextSession =>
-      program.sessions[logs.length % program.sessions.length];
+      activeProgram.sessions[logs.length % activeProgram.sessions.length];
 
-  // Name -> Muskelgruppe (aus allen Programm-Uebungen).
+  // Name -> Muskelgruppe (aus allen Uebungen aller Programme).
   Map<String, MuscleGroup> get _muscleByExercise {
     final map = <String, MuscleGroup>{};
-    for (final session in program.sessions) {
-      for (final ex in session.exercises) {
-        map[ex.name] = ex.muscle;
+    for (final program in allPrograms) {
+      for (final session in program.sessions) {
+        for (final ex in session.exercises) {
+          map[ex.name] = ex.muscle;
+        }
       }
     }
     return map;
@@ -114,6 +132,49 @@ class AppState extends ChangeNotifier {
     if (name.isEmpty) return;
     displayName = name;
     save();
+    notifyListeners();
+  }
+
+  // ---- Programm-Verwaltung ----
+
+  // Aktives Programm waehlen (vorgeschlagen oder eigen).
+  void selectProgram(String name) {
+    selectedProgramName = name;
+    save();
+    notifyListeners();
+  }
+
+  // Eigenen Plan anlegen oder (bei Namensgleichheit) ersetzen = Bearbeiten.
+  void addOrUpdateCustomProgram(Program program) {
+    final idx = customPrograms.indexWhere((p) => p.name == program.name);
+    if (idx >= 0) {
+      customPrograms[idx] = program;
+    } else {
+      customPrograms.add(program);
+    }
+    selectedProgramName = program.name;
+    save();
+    notifyListeners();
+  }
+
+  // Eigenen Plan loeschen. War er aktiv, faellt die Auswahl auf den ersten Vorschlag.
+  void deleteCustomProgram(String name) {
+    customPrograms.removeWhere((p) => p.name == name);
+    if (selectedProgramName == name) {
+      selectedProgramName = suggestedPrograms.first.name;
+    }
+    save();
+    notifyListeners();
+  }
+
+  // Mid-Session eine Uebung zur laufenden Session hinzufuegen (Werte vorbelegt).
+  void addExerciseToActiveSession(ExerciseTemplate ex) {
+    final lastSets = _lastWorkingSetsFor(ex.name);
+    final sets = List.generate(ex.targetSets, (i) {
+      final prev = i < lastSets.length ? lastSets[i] : null;
+      return SetEntry(weight: prev?.weight, reps: prev?.reps);
+    });
+    activeExercises.add(ExerciseInstance(template: ex, sets: sets));
     notifyListeners();
   }
 
@@ -156,6 +217,12 @@ class AppState extends ChangeNotifier {
       _restOverrides
         ..clear()
         ..addAll(ro.map((k, v) => MapEntry(k, v as int)));
+      customPrograms
+        ..clear()
+        ..addAll((data['customPrograms'] as List? ?? [])
+            .map((e) => Program.fromJson(e as Map<String, dynamic>)));
+      selectedProgramName =
+          data['selectedProgramName'] as String? ?? suggestedPrograms.first.name;
     } catch (_) {
       // Beschaedigte Daten -> sauberer Neustart mit Demo.
       _seedDemoHistory();
@@ -177,6 +244,8 @@ class AppState extends ChangeNotifier {
       'displayName': displayName,
       'lastWorkoutDate': lastWorkoutDate?.toIso8601String(),
       'restOverrides': _restOverrides,
+      'selectedProgramName': selectedProgramName,
+      'customPrograms': customPrograms.map((p) => p.toJson()).toList(),
       'history': history.map((e) => e.toJson()).toList(),
       'logs': logs.map((e) => e.toJson()).toList(),
     };

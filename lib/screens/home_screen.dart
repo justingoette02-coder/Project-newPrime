@@ -5,8 +5,10 @@ import '../services/app_state.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../widgets/aura_orb.dart';
+import '../widgets/aura_eyes.dart';
 import 'workout_screen.dart';
 import 'history_screen.dart';
+import 'program_builder_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -22,7 +24,14 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: [
                 _topBar(context),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+                Center(
+                  child: AuraEyes(
+                      tier: tier,
+                      width: 132,
+                      dimmed: state.isStreakAtRisk),
+                ),
+                const SizedBox(height: 14),
                 _heroAura(context, state, tier),
                 const SizedBox(height: 20),
                 _xpBar(state),
@@ -30,6 +39,8 @@ class HomeScreen extends StatelessWidget {
                 _statRow(state, tier),
                 const SizedBox(height: 20),
                 _todayCard(context, state),
+                const SizedBox(height: 16),
+                _programSection(context, state),
                 const SizedBox(height: 20),
                 _weeklyVolume(state),
               ],
@@ -343,6 +354,207 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  // Session starten + zum Workout navigieren.
+  void _startSession(
+      BuildContext context, AppState state, SessionTemplate session) {
+    state.startSession(session);
+    Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const WorkoutScreen()));
+  }
+
+  // Aktiver Plan + frei waehlbare Trainingstage.
+  Widget _programSection(BuildContext context, AppState state) {
+    final program = state.activeProgram;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('TRAININGSPLAN', style: AppTheme.label),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => _showProgramPicker(context, state),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(program.name,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.unfold_more,
+                      size: 16, color: AppColors.textSecondary),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              ...List.generate(program.sessions.length, (i) {
+                final s = program.sessions[i];
+                return Column(
+                  children: [
+                    if (i > 0)
+                      const Divider(
+                          height: 1, color: AppColors.border, thickness: 1),
+                    InkWell(
+                      onTap: () => _startSession(context, state, s),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(s.name,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary)),
+                                  const SizedBox(height: 2),
+                                  Text('${s.exercises.length} Uebungen',
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textTertiary)),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.play_circle_outline,
+                                size: 22, color: AppColors.aura),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // BottomSheet: Plan wechseln, eigene Plaene bearbeiten/loeschen, neuen anlegen.
+  void _showProgramPicker(BuildContext context, AppState state) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('TRAININGSPLAN WAEHLEN', style: AppTheme.label),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      ...state.allPrograms.map((p) {
+                        final active = p.name == state.activeProgram.name;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            active
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            color: active
+                                ? AppColors.aura
+                                : AppColors.textTertiary,
+                            size: 20,
+                          ),
+                          title: Text(p.name,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textPrimary)),
+                          subtitle: Text(
+                              '${p.sessions.length} Tage'
+                              '${p.isCustom ? " · eigen" : " · Vorschlag"}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textTertiary)),
+                          trailing: p.isCustom
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit,
+                                          size: 18,
+                                          color: AppColors.textSecondary),
+                                      onPressed: () {
+                                        Navigator.of(ctx).pop();
+                                        Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                                builder: (_) =>
+                                                    ProgramBuilderScreen(
+                                                        existing: p)));
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          size: 18, color: AppColors.danger),
+                                      onPressed: () {
+                                        state.deleteCustomProgram(p.name);
+                                        Navigator.of(ctx).pop();
+                                      },
+                                    ),
+                                  ],
+                                )
+                              : null,
+                          onTap: () {
+                            state.selectProgram(p.name);
+                            Navigator.of(ctx).pop();
+                          },
+                        );
+                      }),
+                      const Divider(color: AppColors.border),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.add_circle_outline,
+                            color: AppColors.aura, size: 20),
+                        title: const Text('Neuen Plan erstellen',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.aura)),
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) =>
+                                  const ProgramBuilderScreen()));
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
