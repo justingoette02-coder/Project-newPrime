@@ -5,9 +5,15 @@ import '../services/gamification.dart';
 import 'aura_orb.dart';
 
 /// Provisorische "Aura-Augen" (Platzhalter fuer das spaetere Rive-Asset).
-/// Zwei leuchtende Anime-Augen, deren Farbe und Intensitaet von der Stufe
-/// abhaengen (BAUPLAN Abschnitt 5). Hoehere Stufen: hellere Iris, Stern-Burst,
-/// staerkeres Glühen. [dimmed] => Aura verblasst (Streak in Gefahr).
+/// Jeder Rang bekommt eine eigene Signatur-Animation passend zum Titel
+/// (BAUPLAN Abschnitt 5):
+///   1 Flacker    -> unruhiges Flackern
+///   2 Glut       -> warmes, langsames Atmen
+///   3 Fokus      -> scharfer Pupillen-Pull
+///   4 Durchbruch -> berstende Ringe
+///   5 Flow-State -> stroemender Glanz
+///   6 Sovereign  -> majestaetische Krone + Halo
+/// [dimmed] => Aura verblasst (Streak in Gefahr).
 class AuraEyes extends StatefulWidget {
   final AuraTier tier;
   final double width;
@@ -27,6 +33,7 @@ class AuraEyes extends StatefulWidget {
 class _AuraEyesState extends State<AuraEyes> with TickerProviderStateMixin {
   late final AnimationController _pulse;
   late final AnimationController _blink;
+  late final AnimationController _phase;
 
   @override
   void initState() {
@@ -37,6 +44,12 @@ class _AuraEyesState extends State<AuraEyes> with TickerProviderStateMixin {
       vsync: this,
       duration: Duration(milliseconds: (seconds * 1000).round()),
     )..repeat(reverse: true);
+
+    // Kontinuierliche Phase fuer Rotation / Fluss / Flacker (0..1, kein reverse).
+    _phase = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4000),
+    )..repeat();
 
     // Blinzeln in unregelmaessigen Abstaenden.
     _blink = AnimationController(
@@ -60,6 +73,7 @@ class _AuraEyesState extends State<AuraEyes> with TickerProviderStateMixin {
   void dispose() {
     _pulse.dispose();
     _blink.dispose();
+    _phase.dispose();
     super.dispose();
   }
 
@@ -67,7 +81,7 @@ class _AuraEyesState extends State<AuraEyes> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final color = AuraOrb.colorForTier(widget.tier.index);
     return AnimatedBuilder(
-      animation: Listenable.merge([_pulse, _blink]),
+      animation: Listenable.merge([_pulse, _blink, _phase]),
       builder: (context, _) {
         return SizedBox(
           width: widget.width,
@@ -78,6 +92,7 @@ class _AuraEyesState extends State<AuraEyes> with TickerProviderStateMixin {
               tierIndex: widget.tier.index,
               pulse: _pulse.value,
               blink: _blink.value,
+              phase: _phase.value,
               dimmed: widget.dimmed,
             ),
           ),
@@ -92,6 +107,7 @@ class _EyesPainter extends CustomPainter {
   final int tierIndex;
   final double pulse; // 0..1
   final double blink; // 0 = offen, 1 = geschlossen
+  final double phase; // 0..1, kontinuierlich
   final bool dimmed;
 
   _EyesPainter({
@@ -99,8 +115,19 @@ class _EyesPainter extends CustomPainter {
     required this.tierIndex,
     required this.pulse,
     required this.blink,
+    required this.phase,
     required this.dimmed,
   });
+
+  // Flacker-Faktor (nur Stufe 1): unruhige, pseudo-zufaellige Helligkeit.
+  double get _flicker {
+    if (tierIndex != 1 || dimmed) return 1.0;
+    final t = phase * math.pi * 2;
+    final n = math.sin(t * 7) * 0.5 +
+        math.sin(t * 13 + 1.3) * 0.3 +
+        math.sin(t * 23 + 2.1) * 0.2;
+    return (0.55 + 0.45 * (0.5 + 0.5 * n)).clamp(0.2, 1.0);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -118,17 +145,42 @@ class _EyesPainter extends CustomPainter {
 
   void _drawEye(
       Canvas canvas, Offset c, double eyeW, double eyeH, double intensity) {
+    final flicker = _flicker;
+    // Stufe 2 "Glut" atmet langsam und weich.
+    final breath = tierIndex == 2 ? (0.6 + 0.4 * pulse) : 1.0;
+
     // Mandelfoermige Augenkontur.
     final eyePath = _almond(c, eyeW, eyeH);
 
-    // Aussen-Glühen (intensiver bei hoeheren Stufen + Puls).
+    // Aussen-Glühen (intensiver bei hoeheren Stufen + Puls + Flacker).
     if (!dimmed) {
+      final glowBase = (0.18 + 0.35 * intensity) * (0.7 + 0.3 * pulse);
       final glow = Paint()
         ..color = color.withAlpha(
-            (((0.18 + 0.35 * intensity) * (0.7 + 0.3 * pulse)) * 255).round())
-        ..maskFilter = MaskFilter.blur(
-            BlurStyle.normal, 6 + 10 * intensity * (0.8 + 0.2 * pulse));
+            (glowBase * flicker * breath * 255).round().clamp(0, 255).toInt())
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal,
+            (6 + 10 * intensity * (0.8 + 0.2 * pulse)) * breath);
       canvas.drawPath(eyePath, glow);
+    }
+
+    // Stufe 6: heller Halo-Ring hinter dem Auge.
+    if (tierIndex >= 6 && !dimmed) {
+      final halo = Paint()
+        ..color = color.withAlpha(((0.22 + 0.12 * pulse) * 255).round())
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+      canvas.drawCircle(c, eyeH * 0.95, halo);
+    }
+
+    // Stufe 4: berstende, expandierende Ringe.
+    if (tierIndex == 4 && !dimmed) {
+      for (final off in [0.0, 0.5]) {
+        final p = (phase + off) % 1.0;
+        final ringPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6 * (1 - p)
+          ..color = color.withAlpha(((1 - p) * 0.5 * 255).round());
+        canvas.drawCircle(c, eyeH * (0.5 + 0.7 * p), ringPaint);
+      }
     }
 
     // Dunkler Augapfel-Hintergrund.
@@ -141,10 +193,11 @@ class _EyesPainter extends CustomPainter {
     // Iris als radialer Verlauf.
     final irisR = eyeH * 0.62;
     final irisRect = Rect.fromCircle(center: c, radius: irisR);
+    final irisCore = Color.lerp(color, Colors.white, dimmed ? 0.0 : 0.35)!;
     final irisPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          Color.lerp(color, Colors.white, dimmed ? 0.0 : 0.35)!,
+          irisCore,
           color,
           color.withAlpha(38),
         ],
@@ -152,44 +205,74 @@ class _EyesPainter extends CustomPainter {
       ).createShader(irisRect);
     canvas.drawCircle(c, irisR, irisPaint);
 
-    // Stern-Burst in der Iris ab Stufe 3.
+    // Stufe 5 "Flow-State": ein stroemender Glanzbogen wandert um die Iris.
+    if (tierIndex == 5 && !dimmed) {
+      final a = phase * math.pi * 2;
+      final gc = Offset(
+          c.dx + math.cos(a) * irisR * 0.5, c.dy + math.sin(a) * irisR * 0.5);
+      final sweep = Paint()
+        ..shader = RadialGradient(colors: [
+          Colors.white.withAlpha(150),
+          Colors.white.withAlpha(0),
+        ]).createShader(Rect.fromCircle(center: gc, radius: irisR * 0.6));
+      canvas.drawCircle(gc, irisR * 0.6, sweep);
+    }
+
+    // Stern-Burst in der Iris ab Stufe 3 (Strahlenzahl/-laenge pro Stufe).
     if (tierIndex >= 3 && !dimmed) {
       final burst = Paint()
         ..color = Colors.white
             .withAlpha(((0.55 * (0.6 + 0.4 * pulse)) * 255).round())
-        ..strokeWidth = 1.4
+        ..strokeWidth = tierIndex >= 6 ? 1.8 : 1.4
         ..strokeCap = StrokeCap.round;
-      final rays = 4 + (tierIndex - 3) * 2; // mehr Strahlen bei hoeherer Stufe
+      final rays = 4 + (tierIndex - 3) * 3; // mehr Strahlen bei hoeherer Stufe
+      // Stufe 5/6 rotieren gleichmaessig, sonst nur leichtes Puls-Wandern.
+      final spin = tierIndex >= 5 ? phase * math.pi * 2 : pulse * 0.4;
+      final lenF = tierIndex >= 6 ? 0.75 : 0.55;
       for (int i = 0; i < rays; i++) {
-        final a = (math.pi * 2 / rays) * i + pulse * 0.4;
-        final len = irisR * (0.55 + 0.25 * pulse);
+        final ang = (math.pi * 2 / rays) * i + spin;
+        final len = irisR * (lenF + 0.25 * pulse);
         canvas.drawLine(
           c,
-          Offset(c.dx + math.cos(a) * len, c.dy + math.sin(a) * len),
+          Offset(c.dx + math.cos(ang) * len, c.dy + math.sin(ang) * len),
           burst,
         );
       }
     }
 
-    // Pupille.
-    canvas.drawCircle(c, eyeH * 0.22, Paint()..color = AppColors.bg);
+    // Pupille — Stufe 3 "Fokus" zieht scharf (kontrahiert/weitet).
+    final pupilScale = tierIndex == 3
+        ? (0.7 + 0.5 * (0.5 + 0.5 * math.sin(phase * math.pi * 2)))
+        : 1.0;
+    canvas.drawCircle(
+        c, eyeH * 0.22 * pupilScale, Paint()..color = AppColors.bg);
 
-    // Glanzpunkt.
+    // Glanzpunkt (Stufe 6 funkelt zusaetzlich).
     canvas.drawCircle(
       Offset(c.dx - eyeW * 0.12, c.dy - eyeH * 0.18),
       eyeH * 0.09,
       Paint()..color = Colors.white.withAlpha(dimmed ? 77 : 217),
     );
+    if (tierIndex >= 6 && !dimmed) {
+      final tw = 0.5 + 0.5 * math.sin(phase * math.pi * 2 + 1.0);
+      canvas.drawCircle(
+        Offset(c.dx + eyeW * 0.16, c.dy - eyeH * 0.05),
+        eyeH * 0.05 * tw,
+        Paint()..color = Colors.white.withAlpha((tw * 200).round()),
+      );
+    }
 
     canvas.restore();
 
-    // Augenkontur-Linie.
+    // Augenkontur-Linie (Stufe 3 "Fokus" crisp & hell).
     canvas.drawPath(
       eyePath,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..color = dimmed ? AppColors.border : color.withAlpha(230),
+        ..strokeWidth = tierIndex == 3 ? 2.0 : 1.6
+        ..color = dimmed
+            ? AppColors.border
+            : color.withAlpha(tierIndex == 3 ? 255 : 230),
     );
   }
 
@@ -209,6 +292,7 @@ class _EyesPainter extends CustomPainter {
   bool shouldRepaint(_EyesPainter old) =>
       old.pulse != pulse ||
       old.blink != blink ||
+      old.phase != phase ||
       old.color != color ||
       old.tierIndex != tierIndex ||
       old.dimmed != dimmed;

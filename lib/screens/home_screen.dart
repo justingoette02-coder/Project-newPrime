@@ -31,12 +31,14 @@ class HomeScreen extends StatelessWidget {
                       width: 132,
                       dimmed: state.isStreakAtRisk),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
+                _auraTitle(tier),
+                const SizedBox(height: 16),
+                _auraBars(state, tier),
+                const SizedBox(height: 18),
                 _heroAura(context, state, tier),
                 const SizedBox(height: 20),
-                _xpBar(state),
-                const SizedBox(height: 20),
-                _statRow(state, tier),
+                _streakCard(state),
                 const SizedBox(height: 20),
                 _todayCard(context, state),
                 const SizedBox(height: 16),
@@ -172,15 +174,59 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _xpBar(AppState state) {
+  // Zentrierter Aura-Titel unter den Augen (Effekt "entspricht dem Titel").
+  Widget _auraTitle(tier) {
+    final color = AuraOrb.colorForTier(tier.index);
+    return Center(
+      child: Text(
+        '${tier.name.toUpperCase()} · RANG ${tier.rank}',
+        style: TextStyle(
+          fontSize: 13,
+          letterSpacing: 2,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  // Zwei gestapelte Balken bei den Augen: Aura-Fortschritt + XP.
+  Widget _auraBars(AppState state, tier) {
+    final auraColor = AuraOrb.colorForTier(tier.index);
+    final nextAt = tier.nextAt;
+    return Column(
+      children: [
+        _progressBar(
+          label: 'AURA',
+          trailing: nextAt == null ? 'MAX' : '${state.streak} / $nextAt',
+          value: tier.progress(state.streak),
+          color: auraColor,
+        ),
+        const SizedBox(height: 14),
+        _progressBar(
+          label: 'XP',
+          trailing: '${state.xpIntoLevel} / ${state.xpForNextLevel}',
+          value: state.levelProgress,
+          color: AppColors.aura,
+        ),
+      ],
+    );
+  }
+
+  Widget _progressBar({
+    required String label,
+    required String trailing,
+    required double value,
+    required Color color,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('XP', style: AppTheme.label),
-            Text('${state.xpIntoLevel} / ${state.xpForNextLevel}',
+            Text(label, style: AppTheme.label),
+            Text(trailing,
                 style: const TextStyle(
                     fontSize: 11, color: AppColors.textSecondary)),
           ],
@@ -189,49 +235,34 @@ class HomeScreen extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(
-            value: state.levelProgress,
+            value: value.clamp(0.0, 1.0).toDouble(),
             minHeight: 6,
             backgroundColor: AppColors.surfaceAlt,
-            valueColor:
-                const AlwaysStoppedAnimation<Color>(AppColors.aura),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
       ],
     );
   }
 
-  Widget _statRow(AppState state, tier) {
-    return Row(
-      children: [
-        Expanded(
-          child: _statCard(
-            icon: Icons.local_fire_department,
-            label: 'STREAK',
-            value: '${state.streak}',
-            suffix: ' Tage',
-            color: AppColors.streak,
-            badge: state.shields > 0
-                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.shield,
-                        size: 11, color: AppColors.textTertiary),
-                    const SizedBox(width: 2),
-                    Text('${state.shields}',
-                        style: const TextStyle(
-                            fontSize: 10, color: AppColors.textTertiary)),
-                  ])
-                : null,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _statCard(
-            icon: Icons.auto_awesome,
-            label: 'AURA',
-            value: tier.name,
-            color: AuraOrb.colorForTier(tier.index),
-          ),
-        ),
-      ],
+  // Streak ueber die volle Breite (Aura wird oben durch Augen + Balken gezeigt).
+  Widget _streakCard(AppState state) {
+    return _statCard(
+      icon: Icons.local_fire_department,
+      label: 'STREAK',
+      value: '${state.streak}',
+      suffix: ' Tage',
+      color: AppColors.streak,
+      badge: state.shields > 0
+          ? Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.shield,
+                  size: 11, color: AppColors.textTertiary),
+              const SizedBox(width: 2),
+              Text('${state.shields}',
+                  style: const TextStyle(
+                      fontSize: 10, color: AppColors.textTertiary)),
+            ])
+          : null,
     );
   }
 
