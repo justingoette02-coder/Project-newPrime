@@ -161,4 +161,199 @@ class Templates {
       ]),
     ],
   );
+
+  /// Vorschlag: Push / Pull / Legs — 3 Tage, klassisch.
+  static const Program pushPullLegs = Program(
+    name: 'Push / Pull / Legs',
+    sessions: [
+      SessionTemplate(name: 'Push', exercises: [
+        ExerciseTemplate(
+            name: 'Flachbankdruecken',
+            muscle: MuscleGroup.chest,
+            repMin: 6,
+            repMax: 8,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Schulterdruecken',
+            muscle: MuscleGroup.shoulders,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Schraegbank Kurzhantel',
+            muscle: MuscleGroup.chest,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Seitheben',
+            muscle: MuscleGroup.shoulders,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Trizeps-Pushdown',
+            muscle: MuscleGroup.triceps,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+      ]),
+      SessionTemplate(name: 'Pull', exercises: [
+        ExerciseTemplate(
+            name: 'Klimmzuege',
+            muscle: MuscleGroup.back,
+            repMin: 6,
+            repMax: 10,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Rudern vorgebeugt',
+            muscle: MuscleGroup.back,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Latzug',
+            muscle: MuscleGroup.back,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Face Pulls',
+            muscle: MuscleGroup.shoulders,
+            repMin: 15,
+            repMax: 20,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Bizeps-Curls',
+            muscle: MuscleGroup.biceps,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+      ]),
+      SessionTemplate(name: 'Legs', exercises: [
+        ExerciseTemplate(
+            name: 'Kniebeuge',
+            muscle: MuscleGroup.quads,
+            repMin: 6,
+            repMax: 8,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Rumaenisches Kreuzheben',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Beinpresse',
+            muscle: MuscleGroup.quads,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Beinbeuger liegend',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Wadenheben stehend',
+            muscle: MuscleGroup.calves,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 4),
+      ]),
+    ],
+  );
+
+  /// Vorschlag: Ganzkoerper 3x — effizient fuer Einsteiger/wenig Zeit.
+  static const Program fullBody3x = Program(
+    name: 'Ganzkoerper — 3x',
+    sessions: [
+      SessionTemplate(name: 'Ganzkoerper A', exercises: [
+        ExerciseTemplate(
+            name: 'Kniebeuge',
+            muscle: MuscleGroup.quads,
+            repMin: 6,
+            repMax: 8,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Flachbankdruecken',
+            muscle: MuscleGroup.chest,
+            repMin: 6,
+            repMax: 8,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Rudern vorgebeugt',
+            muscle: MuscleGroup.back,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Seitheben',
+            muscle: MuscleGroup.shoulders,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+      ]),
+      SessionTemplate(name: 'Ganzkoerper B', exercises: [
+        ExerciseTemplate(
+            name: 'Kreuzheben',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 4,
+            repMax: 6,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Schulterdruecken',
+            muscle: MuscleGroup.shoulders,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Latzug',
+            muscle: MuscleGroup.back,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Beinpresse',
+            muscle: MuscleGroup.quads,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+      ]),
+      SessionTemplate(name: 'Ganzkoerper C', exercises: [
+        ExerciseTemplate(
+            name: 'Front-Kniebeuge',
+            muscle: MuscleGroup.quads,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Schraegbankdruecken',
+            muscle: MuscleGroup.chest,
+            repMin: 8,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Klimmzuege',
+            muscle: MuscleGroup.back,
+            repMin: 6,
+            repMax: 10,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Bizeps-Curls',
+            muscle: MuscleGroup.biceps,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+      ]),
+    ],
+  );
+
+  /// Alle vorgeschlagenen (built-in) Programme.
+  static const List<Program> suggested = [
+    upperLower4x,
+    pushPullLegs,
+    fullBody3x,
+  ];
 }
