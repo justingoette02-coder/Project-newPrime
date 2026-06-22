@@ -17,6 +17,15 @@ class HistoryScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Verlauf',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        actions: [
+          if (logs.isNotEmpty)
+            IconButton(
+              tooltip: 'Gesamte Historie löschen',
+              icon: const Icon(Icons.delete_sweep_outlined,
+                  color: AppColors.textSecondary),
+              onPressed: () => _confirmClearAll(context, state),
+            ),
+        ],
       ),
       body: logs.isEmpty
           ? const Center(
@@ -25,12 +34,69 @@ class HistoryScreen extends StatelessWidget {
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               itemCount: logs.length,
-              itemBuilder: (context, i) => _logCard(logs[i]),
+              itemBuilder: (context, i) => _logCard(context, state, logs[i]),
             ),
     );
   }
 
-  Widget _logCard(WorkoutLog log) {
+  Future<void> _confirmDeleteLog(
+      BuildContext context, AppState state, WorkoutLog log) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Trainingstag löschen?',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        content: Text(
+          '«${log.sessionName}» wird entfernt. XP, Level und Streak werden neu berechnet.',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Löschen',
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) state.deleteLog(log);
+  }
+
+  Future<void> _confirmClearAll(BuildContext context, AppState state) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Gesamte Historie löschen?',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        content: const Text(
+          'Alle Trainingstage werden entfernt. XP, Level und Streak werden auf 0 zurückgesetzt. Das kann nicht rückgängig gemacht werden.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Alles löschen',
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) state.clearAllHistory();
+  }
+
+  Widget _logCard(BuildContext context, AppState state, WorkoutLog log) {
     final exercises = _groupByExercise(log.sets);
     final dateLabel = _formatDate(log.date);
 
@@ -48,14 +114,26 @@ class HistoryScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(log.sessionName,
-                  style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary)),
+              Expanded(
+                child: Text(log.sessionName,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+              ),
               Text(dateLabel,
                   style: const TextStyle(
                       fontSize: 11, color: AppColors.textTertiary)),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => _confirmDeleteLog(context, state, log),
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 6, top: 2, bottom: 2),
+                  child: Icon(Icons.delete_outline,
+                      size: 18, color: AppColors.textTertiary),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
