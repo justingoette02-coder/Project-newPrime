@@ -71,11 +71,79 @@ class HomeScreen extends StatelessWidget {
               child: const Icon(Icons.history,
                   size: 20, color: AppColors.textSecondary),
             ),
+            const SizedBox(width: 14),
+            GestureDetector(
+              onTap: () => _showImportDialog(context),
+              child: const Icon(Icons.file_upload_outlined,
+                  size: 20, color: AppColors.textSecondary),
+            ),
             const SizedBox(width: 12),
             const Icon(Icons.bolt, size: 18, color: AppColors.textSecondary),
           ],
         ),
       ],
+    );
+  }
+
+  Future<void> _showImportDialog(BuildContext context) async {
+    final state = context.read<AppState>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Hevy CSV importieren',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        content: const Text(
+          'Die bestehende Historie wird durch den CSV-Import ersetzt. XP, Level und Streak werden neu berechnet.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('CSV wählen',
+                style: TextStyle(color: AppColors.aura)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final result = await state.importHevyCsv();
+    if (!context.mounted) return;
+
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Import fehlgeschlagen oder abgebrochen.'),
+          backgroundColor: AppColors.surface,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Import erfolgreich',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        content: Text(
+          '${result['sessions']} Sessions · ${result['sets']} Sätze\n'
+          'XP: ${result['xp']}  ·  Streak: ${result['streak']}',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: AppColors.aura)),
+          ),
+        ],
+      ),
     );
   }
 

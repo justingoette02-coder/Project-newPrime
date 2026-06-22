@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import '../data/templates.dart';
+import '../data/hevy_seed.dart';
 import 'gamification.dart';
 
 // Ergebnis eines abgeschlossenen Workouts (fuer die Belohnungs-Anzeige).
@@ -188,11 +190,14 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storeKey);
     if (raw == null) {
-      // Erster Start: Demo-Daten, damit das Dashboard lebt.
-      _seedDemoHistory();
-      lastWorkoutDate = DateTime.now().subtract(const Duration(days: 1));
-      xp = 2600;
-      streak = 12;
+      // Erster Start: echte Hevy-Historie als Seed laden.
+      history.addAll(HevySeed.buildHistory());
+      logs.addAll(HevySeed.buildLogs());
+      xp = HevySeed.seedXp;
+      streak = HevySeed.seedStreak;
+      shields = 0;
+      lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
+      displayName = 'Justin';
       await save();
       notifyListeners();
       return;
@@ -224,13 +229,18 @@ class AppState extends ChangeNotifier {
       selectedProgramName =
           data['selectedProgramName'] as String? ?? suggestedPrograms.first.name;
     } catch (_) {
-      // Beschaedigte Daten -> sauberer Neustart mit Demo.
-      _seedDemoHistory();
-      xp = 2600;
-      streak = 12;
-      shields = 1;
-      displayName = 'Athlet';
-      lastWorkoutDate = DateTime.now().subtract(const Duration(days: 1));
+      // Beschaedigte Daten -> sauberer Neustart mit echten Seed-Daten.
+      history
+        ..clear()
+        ..addAll(HevySeed.buildHistory());
+      logs
+        ..clear()
+        ..addAll(HevySeed.buildLogs());
+      xp = HevySeed.seedXp;
+      streak = HevySeed.seedStreak;
+      shields = 0;
+      displayName = 'Justin';
+      lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
     }
     notifyListeners();
   }
@@ -428,30 +438,204 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
-  // ---- Demo-Daten, damit das Dashboard beim ersten Start lebt ----
-  void _seedDemoHistory() {
-    final past = DateTime.now().subtract(const Duration(days: 3));
-    history.addAll([
-      CompletedSet(
-          exerciseName: 'Schraegbankdruecken',
-          weight: 80,
-          reps: 8,
-          rpe: 8,
-          date: past),
-      CompletedSet(
-          exerciseName: 'Schraegbankdruecken',
-          weight: 80,
-          reps: 7,
-          rpe: 9,
-          date: past),
-      CompletedSet(
-          exerciseName: 'Latzug', weight: 70, reps: 10, rpe: 8, date: past),
-      CompletedSet(
-          exerciseName: 'Schulterdruecken',
-          weight: 45,
-          reps: 9,
-          rpe: 8,
-          date: past),
-    ]);
+  // ---- Hevy CSV Import ----
+
+  Future<Map<String, int>?> importHevyCsv() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return null;
+    final bytes = picked.files.first.bytes;
+    if (bytes == null) return null;
+    return _applyHevyCsvBytes(bytes);
+  }
+
+  Map<String, int>? _applyHevyCsvBytes(List<int> bytes) {
+    final content = utf8.decode(bytes, allowMalformed: true);
+    final rows = _parseCsv(content);
+    if (rows.length < 2) return null;
+
+    final header = rows.first;
+    int col(String name) => header.indexOf(name);
+    final cTitle = col('title');
+    final cStart = col('start_time');
+    final cEnd = col('end_time');
+    final cExercise = col('exercise_title');
+    final cSetType = col('set_type');
+    final cWeight = col('weight_kg');
+    final cReps = col('reps');
+    if ([cTitle, cStart, cEnd, cExercise, cSetType, cWeight, cReps]
+        .any((i) => i < 0)) {
+      return null;
+    }
+
+    final sessionsMap = <String, Map<String, dynamic>>{};
+    for (int i = 1; i < rows.length; i++) {
+      final r = rows[i];
+      if (r.length <= cReps) continue;
+      final reps = int.tryParse(r[cReps].trim()) ?? 0;
+      if (reps <= 0) continue;
+      final key = '${r[cTitle]}|${r[cStart]}';
+      sessionsMap.putIfAbsent(key, () => {
+            'title': r[cTitle],
+            'start': _parseHevyDate(r[cStart]),
+            'end': _parseHevyDate(r[cEnd]),
+            'rawSets': <Map<String, dynamic>>[],
+          });
+      (sessionsMap[key]!['rawSets'] as List).add({
+        'exercise': r[cExercise],
+        'weight': double.tryParse(r[cWeight].trim()) ?? 0.0,
+        'reps': reps,
+        'isWarmup': r[cSetType].trim().toLowerCase() == 'warmup',
+      });
+    }
+
+    final sessions = sessionsMap.values
+        .where((s) => s['start'] != null)
+        .toList()
+      ..sort((a, b) =>
+          (a['start'] as DateTime).compareTo(b['start'] as DateTime));
+    if (sessions.isEmpty) return null;
+
+    final bestEst1RM = <String, double>{};
+    int totalXp = 0;
+    final newHistory = <CompletedSet>[];
+    final newLogs = <WorkoutLog>[];
+
+    for (final s in sessions) {
+      final start = s['start'] as DateTime;
+      final endDt = s['end'] as DateTime?;
+      int? durMin;
+      if (endDt != null) {
+        final d = endDt.difference(start).inMinutes;
+        if (d >= 1 && d <= 300) durMin = d;
+      }
+      int sessionXp = 0;
+      final sessionSets = <CompletedSet>[];
+      final prExercises = <String>{};
+
+      for (final st in (s['rawSets'] as List)) {
+        final exercise = st['exercise'] as String;
+        final weight = st['weight'] as double;
+        final reps = st['reps'] as int;
+        final isWarmup = st['isWarmup'] as bool;
+        final cs = CompletedSet(
+          exerciseName: exercise,
+          weight: weight,
+          reps: reps,
+          date: start,
+          isWarmup: isWarmup,
+        );
+        sessionSets.add(cs);
+        newHistory.add(cs);
+        if (!isWarmup && reps > 0) {
+          sessionXp += 10;
+          final e1rm = weight * (1 + reps / 30.0);
+          final prev = bestEst1RM[exercise] ?? 0.0;
+          final isPR = (e1rm > prev && prev > 0) || prev == 0.0;
+          if (isPR && !prExercises.contains(exercise)) {
+            prExercises.add(exercise);
+            sessionXp += 50;
+          }
+          if (e1rm > prev) bestEst1RM[exercise] = e1rm;
+        }
+      }
+
+      totalXp += sessionXp;
+      newLogs.add(WorkoutLog(
+        sessionName: s['title'] as String,
+        date: start,
+        sets: sessionSets,
+        xpEarned: sessionXp,
+        durationMinutes: durMin,
+      ));
+    }
+
+    int newStreak = 0;
+    int newShields = 0;
+    DateTime? lastDay;
+    for (final log in newLogs) {
+      final day = DateTime(log.date.year, log.date.month, log.date.day);
+      if (lastDay == null) {
+        newStreak = 1;
+      } else {
+        final days = day.difference(lastDay).inDays;
+        if (days == 0) {
+          // selber Tag
+        } else if (days <= 3) {
+          newStreak++;
+        } else if (newShields > 0) {
+          newShields--;
+          newStreak++;
+        } else {
+          newStreak = 1;
+        }
+      }
+      lastDay = day;
+    }
+
+    history
+      ..clear()
+      ..addAll(newHistory);
+    logs
+      ..clear()
+      ..addAll(newLogs);
+    xp = totalXp;
+    streak = newStreak;
+    shields = newShields;
+    lastWorkoutDate = newLogs.last.date;
+    save();
+    notifyListeners();
+
+    return {
+      'sessions': sessions.length,
+      'sets': newHistory.length,
+      'xp': totalXp,
+      'streak': newStreak,
+    };
+  }
+
+  static List<List<String>> _parseCsv(String content) {
+    final rows = <List<String>>[];
+    for (final line in content.split(RegExp(r'\r?\n'))) {
+      if (line.trim().isEmpty) continue;
+      final fields = <String>[];
+      var inQuotes = false;
+      final field = StringBuffer();
+      for (int i = 0; i < line.length; i++) {
+        final c = line[i];
+        if (c == '"') {
+          inQuotes = !inQuotes;
+        } else if (c == ',' && !inQuotes) {
+          fields.add(field.toString());
+          field.clear();
+        } else {
+          field.write(c);
+        }
+      }
+      fields.add(field.toString());
+      rows.add(fields);
+    }
+    return rows;
+  }
+
+  static const _hevyMonths = {
+    'Jan': 1, 'Feb': 2, 'März': 3, 'Apr': 4,
+    'Mai': 5, 'Juni': 6, 'Juli': 7, 'Aug': 8,
+    'Sept': 9, 'Okt': 10, 'Nov': 11, 'Dez': 12,
+  };
+
+  static DateTime? _parseHevyDate(String s) {
+    final m =
+        RegExp(r'(\d+)\s+(\w+)\s+(\d+),\s+(\d+):(\d+)').firstMatch(s.trim());
+    if (m == null) return null;
+    final month = _hevyMonths[m.group(2)];
+    if (month == null) return null;
+    return DateTime(
+      int.parse(m.group(3)!), month, int.parse(m.group(1)!),
+      int.parse(m.group(4)!), int.parse(m.group(5)!),
+    );
   }
 }

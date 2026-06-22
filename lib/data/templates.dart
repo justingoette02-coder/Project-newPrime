@@ -4,6 +4,171 @@ import '../models/models.dart';
 /// Wiederholungsbereiche sind je Uebung gemischt:
 /// schwer bei Grunduebungen, leichter bei Isolation.
 class Templates {
+  /// Justins tatsaechliches aktuelles Programm (aus Hevy-Daten).
+  static const Program justinUpperLower = Program(
+    name: 'Upper / Lower — Aktuell',
+    sessions: [
+      SessionTemplate(name: 'Upper A', exercises: [
+        ExerciseTemplate(
+            name: 'Schrägbankdrücken (Kurzhantel)',
+            muscle: MuscleGroup.chest,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Fliegende (Maschine)',
+            muscle: MuscleGroup.chest,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Brust Dip (Gewichtet)',
+            muscle: MuscleGroup.chest,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Latzug (Kabel)',
+            muscle: MuscleGroup.back,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Gerader Lat-Pulldown (Kabel)',
+            muscle: MuscleGroup.back,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Seitheben (Kurzhantel)',
+            muscle: MuscleGroup.shoulders,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Überkopf-Trizepsstrecken (Kabelzug)',
+            muscle: MuscleGroup.triceps,
+            repMin: 10,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Incline Curl sitzend (Kurzhantel)',
+            muscle: MuscleGroup.biceps,
+            repMin: 10,
+            repMax: 15,
+            targetSets: 3),
+      ]),
+      SessionTemplate(name: 'Lower A', exercises: [
+        ExerciseTemplate(
+            name: 'Hackenschmidt Squat (Maschine)',
+            muscle: MuscleGroup.quads,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Rumänisches Kreuzheben (Langhantel)',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Beinbeugen sitzend',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 10,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Wadenheben sitzend',
+            muscle: MuscleGroup.calves,
+            repMin: 12,
+            repMax: 20,
+            targetSets: 4),
+      ]),
+      SessionTemplate(name: 'Upper B', exercises: [
+        ExerciseTemplate(
+            name: 'Bankdrücken (Kurzhantel)',
+            muscle: MuscleGroup.chest,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Latzug (Kabel)',
+            muscle: MuscleGroup.back,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Gerader Lat-Pulldown (Kabel)',
+            muscle: MuscleGroup.back,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Iso-laterales Rudern',
+            muscle: MuscleGroup.back,
+            repMin: 10,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Face Pull',
+            muscle: MuscleGroup.shoulders,
+            repMin: 15,
+            repMax: 20,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Seitheben (Kabel)',
+            muscle: MuscleGroup.shoulders,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 4),
+        ExerciseTemplate(
+            name: 'Incline Curl sitzend (Kurzhantel)',
+            muscle: MuscleGroup.biceps,
+            repMin: 10,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Trizepsdrücken',
+            muscle: MuscleGroup.triceps,
+            repMin: 12,
+            repMax: 15,
+            targetSets: 3),
+      ]),
+      SessionTemplate(name: 'Lower B', exercises: [
+        ExerciseTemplate(
+            name: 'Kreuzheben mit gestreckten Beinen',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Hip Thrust (Maschine)',
+            muscle: MuscleGroup.glutes,
+            repMin: 8,
+            repMax: 12,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Beinbeugen sitzend',
+            muscle: MuscleGroup.hamstrings,
+            repMin: 10,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Beinstrecken',
+            muscle: MuscleGroup.quads,
+            repMin: 10,
+            repMax: 15,
+            targetSets: 3),
+        ExerciseTemplate(
+            name: 'Wadenheben sitzend',
+            muscle: MuscleGroup.calves,
+            repMin: 12,
+            repMax: 20,
+            targetSets: 4),
+      ]),
+    ],
+  );
+
   static const Program upperLower4x = Program(
     name: 'Upper / Lower — 4x',
     sessions: [
@@ -352,6 +517,7 @@ class Templates {
 
   /// Alle vorgeschlagenen (built-in) Programme.
   static const List<Program> suggested = [
+    justinUpperLower,
     upperLower4x,
     pushPullLegs,
     fullBody3x,
