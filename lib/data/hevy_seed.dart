@@ -4,6 +4,12 @@ import '../models/models.dart';
 // Auto-generated from Hevy CSV export.
 // 244 sessions | 4336 sets | XP 58460 | Level 32 | Streak 8
 class HevySeed {
+  // Versionsnummer des eingebetteten Seeds. Wird beim App-Start mit dem
+  // gespeicherten Wert verglichen: ist der gespeicherte Wert kleiner, werden
+  // die echten Hevy-Daten automatisch geladen (Migration ohne Button-Tipp).
+  // Nur erhoehen, wenn die _data unten tatsaechlich aktualisiert wurden.
+  static const int seedVersion = 1;
+
   static const int seedXp = 58460;
   static const int seedStreak = 8;
   static const String seedLastWorkoutDate = '2026-06-21T15:00:00';
