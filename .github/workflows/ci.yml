@@ -39,9 +39,7 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Web-Build
-        # --pwa-strategy=none deaktiviert den Service Worker, damit Updates
-        # sofort bei einem einzigen Reload erscheinen (kein "zweimal neu laden").
-        run: flutter build web --release --pwa-strategy=none --base-href "/Project-newPrime/"
+        run: flutter build web --release --base-href "/Project-newPrime/"
 
       - name: Pages konfigurieren
         uses: actions/configure-pages@v5

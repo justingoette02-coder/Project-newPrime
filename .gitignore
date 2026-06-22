@@ -9,10 +9,13 @@ pubspec.lock
 # Von 'flutter create' erzeugte Plattform-Ordner (CI erzeugt sie neu)
 /android/
 /ios/
-/web/
 /linux/
 /macos/
 /windows/
+# web/ wird teilweise committed (Manifest + Icons fuer PWA), daher kein globaler Ausschluss
+/web/*.html
+/web/*.dart
+/web/flutter*
 
 # IDE
 .idea/
