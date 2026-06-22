@@ -58,6 +58,9 @@ class AppState extends ChangeNotifier {
   DateTime? lastWorkoutDate;
   String displayName = 'Athlet';
 
+  // Welche Seed-Version zuletzt in diesen lokalen Speicher geschrieben wurde.
+  int _appliedSeedVersion = 0;
+
   // Benutzerdefinierte Pausenzeiten pro Uebungsname (ueberschreibt den Standardwert).
   final Map<String, int> _restOverrides = {};
 
@@ -191,13 +194,7 @@ class AppState extends ChangeNotifier {
     final raw = prefs.getString(_storeKey);
     if (raw == null) {
       // Erster Start: echte Hevy-Historie als Seed laden.
-      history.addAll(HevySeed.buildHistory());
-      logs.addAll(HevySeed.buildLogs());
-      xp = HevySeed.seedXp;
-      streak = HevySeed.seedStreak;
-      shields = 0;
-      lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
-      displayName = 'Justin';
+      _loadEmbeddedSeedData();
       await save();
       notifyListeners();
       return;
@@ -228,21 +225,38 @@ class AppState extends ChangeNotifier {
             .map((e) => Program.fromJson(e as Map<String, dynamic>)));
       selectedProgramName =
           data['selectedProgramName'] as String? ?? suggestedPrograms.first.name;
+      _appliedSeedVersion = data['seedVersion'] as int? ?? 0;
+
+      // Migration: liegen noch aeltere (Demo-)Daten im Speicher, werden die
+      // echten Hevy-Daten automatisch geladen — ohne dass der Nutzer den
+      // Import-Button tippen muss.
+      if (_appliedSeedVersion < HevySeed.seedVersion) {
+        _loadEmbeddedSeedData();
+        await save();
+      }
     } catch (_) {
       // Beschaedigte Daten -> sauberer Neustart mit echten Seed-Daten.
-      history
-        ..clear()
-        ..addAll(HevySeed.buildHistory());
-      logs
-        ..clear()
-        ..addAll(HevySeed.buildLogs());
-      xp = HevySeed.seedXp;
-      streak = HevySeed.seedStreak;
-      shields = 0;
-      displayName = 'Justin';
-      lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
+      _loadEmbeddedSeedData();
+      await save();
     }
     notifyListeners();
+  }
+
+  // Setzt den Zustand auf die eingebetteten Hevy-Daten (ohne save/notify).
+  // Gemeinsame Basis fuer First-Launch, Migration und manuelles Laden.
+  void _loadEmbeddedSeedData() {
+    history
+      ..clear()
+      ..addAll(HevySeed.buildHistory());
+    logs
+      ..clear()
+      ..addAll(HevySeed.buildLogs());
+    xp = HevySeed.seedXp;
+    streak = HevySeed.seedStreak;
+    shields = 0;
+    lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
+    if (displayName == 'Athlet') displayName = 'Justin';
+    _appliedSeedVersion = HevySeed.seedVersion;
   }
 
   Future<void> save() async {
@@ -252,6 +266,7 @@ class AppState extends ChangeNotifier {
       'streak': streak,
       'shields': shields,
       'displayName': displayName,
+      'seedVersion': _appliedSeedVersion,
       'lastWorkoutDate': lastWorkoutDate?.toIso8601String(),
       'restOverrides': _restOverrides,
       'selectedProgramName': selectedProgramName,
@@ -541,17 +556,7 @@ class AppState extends ChangeNotifier {
   // Hilft, wenn bereits (alte) Daten im lokalen Speicher liegen und der
   // First-Launch-Seed deshalb nicht griff.
   Map<String, int> applyEmbeddedSeed() {
-    history
-      ..clear()
-      ..addAll(HevySeed.buildHistory());
-    logs
-      ..clear()
-      ..addAll(HevySeed.buildLogs());
-    xp = HevySeed.seedXp;
-    streak = HevySeed.seedStreak;
-    shields = 0;
-    lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
-    if (displayName == 'Athlet') displayName = 'Justin';
+    _loadEmbeddedSeedData();
     save();
     notifyListeners();
     return {
