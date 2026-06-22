@@ -537,6 +537,31 @@ class AppState extends ChangeNotifier {
 
   // ---- Hevy CSV Import ----
 
+  // Die eingebettete Hevy-Historie laden (ueberschreibt die aktuellen Daten).
+  // Hilft, wenn bereits (alte) Daten im lokalen Speicher liegen und der
+  // First-Launch-Seed deshalb nicht griff.
+  Map<String, int> applyEmbeddedSeed() {
+    history
+      ..clear()
+      ..addAll(HevySeed.buildHistory());
+    logs
+      ..clear()
+      ..addAll(HevySeed.buildLogs());
+    xp = HevySeed.seedXp;
+    streak = HevySeed.seedStreak;
+    shields = 0;
+    lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
+    if (displayName == 'Athlet') displayName = 'Justin';
+    save();
+    notifyListeners();
+    return {
+      'sessions': logs.length,
+      'sets': history.length,
+      'xp': xp,
+      'streak': streak,
+    };
+  }
+
   Future<Map<String, int>?> importHevyCsv() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,

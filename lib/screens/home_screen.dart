@@ -87,31 +87,46 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _showImportDialog(BuildContext context) async {
     final state = context.read<AppState>();
-    final confirmed = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Hevy CSV importieren',
+        title: const Text('Trainingsdaten laden',
             style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
         content: const Text(
-          'Die bestehende Historie wird durch den CSV-Import ersetzt. XP, Level und Streak werden neu berechnet.',
+          'Lade die eingebettete Historie (deine vollständigen Hevy-Daten, '
+          'kein Datei-Upload nötig) oder importiere eine neue CSV-Datei. '
+          'Die bestehende Historie wird ersetzt; XP, Level und Streak werden '
+          'neu berechnet.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
             child: const Text('Abbrechen',
                 style: TextStyle(color: AppColors.textSecondary)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'csv'),
             child: const Text('CSV wählen',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'embedded'),
+            child: const Text('Eingebettete Daten',
                 style: TextStyle(color: AppColors.aura)),
           ),
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
+    if (choice == null || choice == 'cancel' || !context.mounted) return;
+
+    if (choice == 'embedded') {
+      final result = state.applyEmbeddedSeed();
+      if (!context.mounted) return;
+      _showImportResult(context, result);
+      return;
+    }
 
     final result = await state.importHevyCsv();
     if (!context.mounted) return;
@@ -125,7 +140,10 @@ class HomeScreen extends StatelessWidget {
       );
       return;
     }
+    _showImportResult(context, result);
+  }
 
+  void _showImportResult(BuildContext context, Map<String, int> result) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
