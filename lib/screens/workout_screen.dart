@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/app_state.dart';
@@ -28,6 +29,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (_rest <= 1) {
         t.cancel();
+        // Pause-Ende meldet sich aktiv (Haptik + Ton), damit man im Satz nicht
+        // aufs Display starren muss.
+        HapticFeedback.heavyImpact();
+        SystemSound.play(SystemSoundType.alert);
         setState(() => _rest = 0);
       } else {
         setState(() => _rest--);
