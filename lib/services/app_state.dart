@@ -377,29 +377,28 @@ class AppState extends ChangeNotifier {
         : null;
     _sessionStart = null;
 
+    // Erledigte Saetze der Session als CompletedSet sammeln.
     final completed = <CompletedSet>[];
-    final prs = <String>[];
-    int xpEarned = 0;
-
     for (final ex in activeExercises) {
       for (final s in ex.sets) {
         if (!s.done || s.weight == null || s.reps == null) continue;
-        xpEarned += LevelSystem.xpForSet(s);
-        final cs = CompletedSet(
+        completed.add(CompletedSet(
           exerciseName: ex.name,
           weight: s.weight!,
           reps: s.reps!,
           rpe: s.rpe,
           date: now,
           isWarmup: s.isWarmup,
-        );
-        if (!s.isWarmup && PRChecker.isPR(history, cs)) {
-          if (!prs.contains(ex.name)) prs.add(ex.name);
-          xpEarned += 50; // Boss-Moment-Bonus
-        }
-        completed.add(cs);
+        ));
       }
     }
+
+    // XP + PRs ueber die gemeinsame Bewertung — identische Regeln wie beim
+    // Replay (deleteLog) und CSV-Import (gegen die bisherige Historie).
+    final score = SessionScorer.scoreSession(
+        completed, SessionScorer.bestEst1RMByExercise(history));
+    final int xpEarned = score.xp;
+    final prs = score.prExercises.toList();
 
     final beforeLevel = level;
     xp += xpEarned;
@@ -490,36 +489,40 @@ class AppState extends ChangeNotifier {
     final rebuiltLogs = <WorkoutLog>[];
 
     for (final log in logs) {
-      int sessionXp = 0;
-      final prExercises = <String>{};
-      for (final s in log.sets) {
-        rebuiltHistory.add(s);
-        if (!s.isWarmup && s.reps > 0) {
-          sessionXp += 10;
-          final e1rm = s.estimated1RM;
-          final prev = bestEst1RM[s.exerciseName] ?? 0.0;
-          final isPR = (e1rm > prev && prev > 0) || prev == 0.0;
-          if (isPR && !prExercises.contains(s.exerciseName)) {
-            prExercises.add(s.exerciseName);
-            sessionXp += 50;
-          }
-          if (e1rm > prev) bestEst1RM[s.exerciseName] = e1rm;
-        }
-      }
-      totalXp += sessionXp;
+      rebuiltHistory.addAll(log.sets);
+      final score = SessionScorer.scoreSession(log.sets, bestEst1RM);
+      totalXp += score.xp;
       rebuiltLogs.add(WorkoutLog(
         sessionName: log.sessionName,
         date: log.date,
         sets: log.sets,
-        xpEarned: sessionXp,
+        xpEarned: score.xp,
         durationMinutes: log.durationMinutes,
       ));
     }
 
+    final replay = _replayStreak(rebuiltLogs);
+
+    history
+      ..clear()
+      ..addAll(rebuiltHistory);
+    logs
+      ..clear()
+      ..addAll(rebuiltLogs);
+    xp = totalXp;
+    streak = replay.streak;
+    shields = replay.shields;
+    lastWorkoutDate = rebuiltLogs.isNotEmpty ? rebuiltLogs.last.date : null;
+  }
+
+  // Streak + Schilde aus einer chronologischen Logs-Liste neu aufbauen.
+  // Gleiche Regeln wie der Live-Pfad in finishWorkout — eine Quelle der Wahrheit
+  // fuer Replay (deleteLog) und CSV-Import.
+  static ({int streak, int shields}) _replayStreak(List<WorkoutLog> chronoLogs) {
     int newStreak = 0;
     int newShields = 1;
     DateTime? lastDay;
-    for (final log in rebuiltLogs) {
+    for (final log in chronoLogs) {
       final day = DateTime(log.date.year, log.date.month, log.date.day);
       if (lastDay == null) {
         newStreak = 1;
@@ -538,17 +541,7 @@ class AppState extends ChangeNotifier {
       }
       lastDay = day;
     }
-
-    history
-      ..clear()
-      ..addAll(rebuiltHistory);
-    logs
-      ..clear()
-      ..addAll(rebuiltLogs);
-    xp = totalXp;
-    streak = newStreak;
-    shields = newShields;
-    lastWorkoutDate = rebuiltLogs.isNotEmpty ? rebuiltLogs.last.date : null;
+    return (streak: newStreak, shields: newShields);
   }
 
   // ---- Hevy CSV Import ----
@@ -640,69 +633,32 @@ class AppState extends ChangeNotifier {
         final d = endDt.difference(start).inMinutes;
         if (d >= 1 && d <= 300) durMin = d;
       }
-      int sessionXp = 0;
+
       final sessionSets = <CompletedSet>[];
-      final prExercises = <String>{};
-
       for (final st in (s['rawSets'] as List)) {
-        final exercise = st['exercise'] as String;
-        final weight = st['weight'] as double;
-        final reps = st['reps'] as int;
-        final isWarmup = st['isWarmup'] as bool;
-        final cs = CompletedSet(
-          exerciseName: exercise,
-          weight: weight,
-          reps: reps,
+        sessionSets.add(CompletedSet(
+          exerciseName: st['exercise'] as String,
+          weight: st['weight'] as double,
+          reps: st['reps'] as int,
           date: start,
-          isWarmup: isWarmup,
-        );
-        sessionSets.add(cs);
-        newHistory.add(cs);
-        if (!isWarmup && reps > 0) {
-          sessionXp += 10;
-          final e1rm = weight * (1 + reps / 30.0);
-          final prev = bestEst1RM[exercise] ?? 0.0;
-          final isPR = (e1rm > prev && prev > 0) || prev == 0.0;
-          if (isPR && !prExercises.contains(exercise)) {
-            prExercises.add(exercise);
-            sessionXp += 50;
-          }
-          if (e1rm > prev) bestEst1RM[exercise] = e1rm;
-        }
+          isWarmup: st['isWarmup'] as bool,
+        ));
       }
+      newHistory.addAll(sessionSets);
 
-      totalXp += sessionXp;
+      // Gleiche Bewertung wie Live-Logging und Replay.
+      final score = SessionScorer.scoreSession(sessionSets, bestEst1RM);
+      totalXp += score.xp;
       newLogs.add(WorkoutLog(
         sessionName: s['title'] as String,
         date: start,
         sets: sessionSets,
-        xpEarned: sessionXp,
+        xpEarned: score.xp,
         durationMinutes: durMin,
       ));
     }
 
-    int newStreak = 0;
-    int newShields = 1;
-    DateTime? lastDay;
-    for (final log in newLogs) {
-      final day = DateTime(log.date.year, log.date.month, log.date.day);
-      if (lastDay == null) {
-        newStreak = 1;
-      } else {
-        final days = day.difference(lastDay).inDays;
-        if (days == 0) {
-          // selber Tag
-        } else if (days <= 3) {
-          newStreak++;
-        } else if (newShields > 0) {
-          newShields--;
-          newStreak++;
-        } else {
-          newStreak = 1;
-        }
-      }
-      lastDay = day;
-    }
+    final replay = _replayStreak(newLogs);
 
     history
       ..clear()
@@ -711,8 +667,8 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(newLogs);
     xp = totalXp;
-    streak = newStreak;
-    shields = newShields;
+    streak = replay.streak;
+    shields = replay.shields;
     lastWorkoutDate = newLogs.last.date;
     save();
     notifyListeners();
@@ -721,7 +677,7 @@ class AppState extends ChangeNotifier {
       'sessions': sessions.length,
       'sets': newHistory.length,
       'xp': totalXp,
-      'streak': newStreak,
+      'streak': replay.streak,
     };
   }
 

@@ -68,15 +68,23 @@ class LevelSystem {
     return xpIntoLevel(xp) / span;
   }
 
-  /// XP fuer einen abgeschlossenen Arbeitssatz.
-  /// Basis + leichter Bonus fuer hohe Anstrengung (RPE).
-  static int xpForSet(SetEntry s) {
-    if (!s.done || s.isWarmup) return 0;
-    int xp = 10; // Mikro-Reward pro Satz
-    if (s.rpe != null && s.rpe! >= 8) xp += 4;
-    if (s.rpe != null && s.rpe! >= 9.5) xp += 4;
+  /// Basis-XP-Konstanten — eine Quelle der Wahrheit fuer alle Pfade.
+  static const int baseSetXp = 10; // Mikro-Reward pro Arbeitssatz
+  static const int prBonusXp = 50; // Boss-Moment-Bonus je PR
+
+  /// XP fuer einen Arbeitssatz: Basis + leichter Bonus fuer hohe Anstrengung.
+  /// Gemeinsamer Kern fuer Live-Logging und Replay aus der Historie.
+  static int _xpForWorkingSet(bool isWarmup, int reps, double? rpe) {
+    if (isWarmup || reps <= 0) return 0;
+    int xp = baseSetXp;
+    if (rpe != null && rpe >= 8) xp += 4;
+    if (rpe != null && rpe >= 9.5) xp += 4;
     return xp;
   }
+
+  /// XP fuer einen bereits abgeschlossenen Satz aus der Historie.
+  static int xpForCompletedSet(CompletedSet s) =>
+      _xpForWorkingSet(s.isWarmup, s.reps, s.rpe);
 }
 
 /// Double Progression: erst Wdh bis zum oberen Limit, dann Gewicht rauf.
@@ -138,22 +146,49 @@ class RestDefaults {
   }
 }
 
-/// PR-Erkennung ueber geschaetztes 1RM pro Uebung.
-class PRChecker {
-  /// true, wenn [candidate] das bisher beste geschaetzte 1RM dieser Uebung
-  /// in [history] uebertrifft.
-  static bool isPR(List<CompletedSet> history, CompletedSet candidate) {
-    if (candidate.isWarmup) return false;
-    double best = 0;
+/// Ergebnis der Bewertung einer Session.
+class SessionScore {
+  final int xp;
+  final Set<String> prExercises;
+  const SessionScore(this.xp, this.prExercises);
+}
+
+/// EINZIGE Quelle der Wahrheit fuer XP- und PR-Berechnung. Live-Logging,
+/// Replay (deleteLog) und CSV-Import rufen alle [scoreSession] auf — damit die
+/// drei Pfade nie wieder auseinanderlaufen (gleiche XP-, RPE- und PR-Regeln).
+class SessionScorer {
+  /// Bestes geschaetztes 1RM je Uebung aus der bisherigen Historie.
+  static Map<String, double> bestEst1RMByExercise(List<CompletedSet> history) {
+    final best = <String, double>{};
     for (final s in history) {
       if (s.isWarmup) continue;
-      if (s.exerciseName == candidate.exerciseName &&
-          s.estimated1RM > best) {
-        best = s.estimated1RM;
-      }
+      final e = s.estimated1RM;
+      if (e > (best[s.exerciseName] ?? 0.0)) best[s.exerciseName] = e;
     }
-    return candidate.estimated1RM > best && best > 0
-        ? true
-        : best == 0; // erster echte Satz zaehlt ebenfalls als PR
+    return best;
+  }
+
+  /// Bewertet die Saetze einer Session gegen [bestEst1RM] (wird fortgeschrieben):
+  /// XP je Arbeitssatz inkl. RPE-Bonus + einmaliger PR-Bonus je Uebung.
+  /// Der erste je gezaehlte Satz einer Uebung ist ein PR; danach zaehlt ein
+  /// hoeheres geschaetztes 1RM.
+  static SessionScore scoreSession(
+    List<CompletedSet> sets,
+    Map<String, double> bestEst1RM,
+  ) {
+    int xp = 0;
+    final prs = <String>{};
+    for (final s in sets) {
+      if (s.isWarmup || s.reps <= 0) continue;
+      xp += LevelSystem.xpForCompletedSet(s);
+      final e1rm = s.estimated1RM;
+      final prev = bestEst1RM[s.exerciseName] ?? 0.0;
+      final isPR = prev == 0.0 || e1rm > prev;
+      if (isPR && prs.add(s.exerciseName)) {
+        xp += LevelSystem.prBonusXp;
+      }
+      if (e1rm > prev) bestEst1RM[s.exerciseName] = e1rm;
+    }
+    return SessionScore(xp, prs);
   }
 }
