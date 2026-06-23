@@ -316,12 +316,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Satz als erledigt markieren -> Mikro-Reward (Haptik) + sofort sichtbar.
+  // Satz als erledigt markieren -> Mikro-Reward (Haptik + Ton) + sofort sichtbar.
   void toggleSetDone(int exerciseIndex, int setIndex) {
     final set = activeExercises[exerciseIndex].sets[setIndex];
     set.done = !set.done;
     if (set.done) {
       HapticFeedback.mediumImpact();
+      SystemSound.play(SystemSoundType.click);
     }
     notifyListeners();
   }
