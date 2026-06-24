@@ -192,3 +192,21 @@ class SessionScorer {
     return SessionScore(xp, prs);
   }
 }
+
+/// Bestimmt den als Naechstes faelligen Trainingstag eines Plans aus der
+/// Historie: eins nach dem zuletzt absolvierten Tag, rotierend durch die
+/// Plan-Reihenfolge. Kein passendes Log (leere/fremde Historie) -> Tag 0.
+class Rotation {
+  static int nextSessionIndex(
+    List<WorkoutLog> logs,
+    List<SessionTemplate> sessions,
+  ) {
+    if (sessions.isEmpty) return 0;
+    final names = [for (final s in sessions) s.name];
+    for (int i = logs.length - 1; i >= 0; i--) {
+      final idx = names.indexOf(logs[i].sessionName);
+      if (idx >= 0) return (idx + 1) % sessions.length;
+    }
+    return 0;
+  }
+}

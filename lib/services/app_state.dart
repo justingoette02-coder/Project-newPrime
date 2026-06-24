@@ -90,9 +90,15 @@ class AppState extends ChangeNotifier {
     return diff >= 2;
   }
 
-  // Naechste geplante Session des aktiven Programms (chronologisch rotierend).
+  // Index des als Naechstes faelligen Trainingstags (aus der Historie
+  // abgeleitet, rotiert durch die Reihenfolge des aktiven Plans).
+  int get nextSessionIndex =>
+      Rotation.nextSessionIndex(logs, activeProgram.sessions);
+
+  // Naechster geplanter Trainingstag: eins nach dem zuletzt absolvierten Tag
+  // dieses Plans. Steht auf der Startseite ("HEUTE").
   SessionTemplate get nextSession =>
-      activeProgram.sessions[logs.length % activeProgram.sessions.length];
+      activeProgram.sessions[nextSessionIndex];
 
   // Name -> Muskelgruppe (aus allen Uebungen aller Programme).
   Map<String, MuscleGroup> get _muscleByExercise {
