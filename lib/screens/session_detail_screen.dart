@@ -177,6 +177,11 @@ class SessionDetailScreen extends StatelessWidget {
           else
             ...List.generate(working.length, (i) {
               final s = working[i];
+              final extras = <String>[
+                if (s.rpe != null) 'RPE ${_fmt(s.rpe!)}',
+                if (s.tempo != null && s.tempo!.isNotEmpty) 'Tempo ${s.tempo!}',
+                if (s.restSeconds != null) 'Pause ${s.restSeconds}s',
+              ].join('   ');
               return Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(
@@ -190,11 +195,14 @@ class SessionDetailScreen extends StatelessWidget {
                     Text('${_fmt(s.weight)} kg x ${s.reps}',
                         style: const TextStyle(
                             fontSize: 13, color: AppColors.textSecondary)),
-                    if (s.rpe != null) ...[
+                    if (extras.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Text('RPE ${_fmt(s.rpe!)}',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.textTertiary)),
+                      Expanded(
+                        child: Text(extras,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.textTertiary)),
+                      ),
                     ],
                   ],
                 ),

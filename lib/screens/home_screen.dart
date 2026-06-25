@@ -285,8 +285,9 @@ class HomeScreen extends StatelessWidget {
       children: [
         _progressBar(
           label: 'AURA',
-          trailing: nextAt == null ? 'MAX' : '${state.streak} / $nextAt',
-          value: tier.progress(state.streak),
+          trailing:
+              nextAt == null ? 'MAX' : '${state.effectiveStreak} / $nextAt',
+          value: tier.progress(state.effectiveStreak),
           color: auraColor,
         ),
         const SizedBox(height: 14),

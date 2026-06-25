@@ -56,6 +56,7 @@ class AppState extends ChangeNotifier {
   int streak = 0;
   int shields = 1;
   DateTime? lastWorkoutDate;
+  DateTime? streakStartDate; // Start des aktuellen Konsistenz-Laufs (Tage-Streak)
   String displayName = 'Athlet';
 
   // Welche Seed-Version zuletzt in diesen lokalen Speicher geschrieben wurde.
@@ -77,7 +78,10 @@ class AppState extends ChangeNotifier {
   double get levelProgress => LevelSystem.levelProgress(xp);
   int get xpIntoLevel => LevelSystem.xpIntoLevel(xp);
   int get xpForNextLevel => LevelSystem.xpForNextLevel(xp);
-  AuraTier get auraTier => AuraTier.forStreak(streak);
+  // Sichtbare Streak fuers Aura-Widget (sinkt bei laengerer Pause -> Abstieg).
+  int get effectiveStreak =>
+      AuraDecay.effectiveStreak(streak, lastWorkoutDate, DateTime.now());
+  AuraTier get auraTier => AuraTier.forStreak(effectiveStreak);
 
   // true, wenn seit dem letzten Workout >= 2 Tage vergangen sind.
   bool get isStreakAtRisk {
@@ -120,7 +124,7 @@ class AppState extends ChangeNotifier {
     final map = <MuscleGroup, double>{};
     for (final s in history) {
       if (s.date.isBefore(cutoff) || s.isWarmup) continue;
-      final muscle = byName[s.exerciseName];
+      final muscle = s.muscle ?? byName[s.exerciseName];
       if (muscle == null) continue;
       map[muscle] = (map[muscle] ?? 0) + s.volume;
     }
@@ -213,6 +217,8 @@ class AppState extends ChangeNotifier {
       displayName = data['displayName'] as String? ?? 'Athlet';
       final lwd = data['lastWorkoutDate'] as String?;
       lastWorkoutDate = lwd != null ? DateTime.tryParse(lwd) : null;
+      final ssd = data['streakStartDate'] as String?;
+      streakStartDate = ssd != null ? DateTime.tryParse(ssd) : null;
       history
         ..clear()
         ..addAll((data['history'] as List? ?? [])
@@ -245,6 +251,9 @@ class AppState extends ChangeNotifier {
       _loadEmbeddedSeedData();
       await save();
     }
+    // Streak/Schilde immer aus den (geladenen) Logs ableiten — deckt Migration
+    // alter Saves ohne streakStartDate ab.
+    _applyConsistency();
     notifyListeners();
   }
 
@@ -258,11 +267,10 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(HevySeed.buildLogs());
     xp = HevySeed.seedXp;
-    streak = HevySeed.seedStreak;
-    shields = 0;
-    lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
     if (displayName == 'Athlet') displayName = 'Justin';
     _appliedSeedVersion = HevySeed.seedVersion;
+    // Streak (Tage) + Schilde aus den Seed-Log-Tagen ableiten.
+    _applyConsistency();
   }
 
   Future<void> save() async {
@@ -274,6 +282,7 @@ class AppState extends ChangeNotifier {
       'displayName': displayName,
       'seedVersion': _appliedSeedVersion,
       'lastWorkoutDate': lastWorkoutDate?.toIso8601String(),
+      'streakStartDate': streakStartDate?.toIso8601String(),
       'restOverrides': _restOverrides,
       'selectedProgramName': selectedProgramName,
       'customPrograms': customPrograms.map((p) => p.toJson()).toList(),
@@ -281,6 +290,16 @@ class AppState extends ChangeNotifier {
       'logs': logs.map((e) => e.toJson()).toList(),
     };
     await prefs.setString(_storeKey, jsonEncode(data));
+  }
+
+  // Streak (Tage), Streak-Start und Schilde aus den Logs ableiten — EINE
+  // Quelle der Wahrheit (genutzt von finishWorkout, Replay, Import, Seed, Load).
+  void _applyConsistency() {
+    final c = StreakPolicy.replay([for (final l in logs) l.date]);
+    streak = c.streakDays;
+    streakStartDate = c.streakStart;
+    shields = c.shields;
+    lastWorkoutDate = c.lastDay;
   }
 
   // ---- Session-Ablauf ----
@@ -393,6 +412,10 @@ class AppState extends ChangeNotifier {
           weight: s.weight!,
           reps: s.reps!,
           rpe: s.rpe,
+          restSeconds: s.restSeconds,
+          tempo: s.tempo,
+          note: s.note,
+          muscle: ex.template.muscle,
           date: now,
           isWarmup: s.isWarmup,
         ));
@@ -409,31 +432,6 @@ class AppState extends ChangeNotifier {
     final beforeLevel = level;
     xp += xpEarned;
 
-    // Trainings-Streak mit Shield-System:
-    // - Gleicher Tag: unveraendert
-    // - <= 3 Tage Pause: Streak erhoehen
-    // - > 3 Tage Pause, Schild vorhanden: Schild verbrauchen, Streak erhoehen
-    // - > 3 Tage Pause, kein Schild: Reset auf 1
-    if (lastWorkoutDate != null) {
-      final days = DateTime(now.year, now.month, now.day)
-          .difference(DateTime(lastWorkoutDate!.year, lastWorkoutDate!.month,
-              lastWorkoutDate!.day))
-          .inDays;
-      if (days == 0) {
-        // zweites Workout am selben Tag — Streak unveraendert
-      } else if (days <= 3) {
-        streak++;
-      } else if (shields > 0) {
-        shields--;
-        streak++;
-      } else {
-        streak = 1;
-      }
-    } else {
-      streak = 1;
-    }
-    lastWorkoutDate = now;
-
     history.addAll(completed);
     logs.add(WorkoutLog(
       sessionName: activeTemplate?.name ?? 'Workout',
@@ -442,6 +440,10 @@ class AppState extends ChangeNotifier {
       xpEarned: xpEarned,
       durationMinutes: durationMinutes,
     ));
+
+    // Streak (Tage) + Schilde aus den Logs ableiten — eine Quelle der Wahrheit
+    // (gleiche Policy wie Replay/Import/Seed).
+    _applyConsistency();
 
     activeTemplate = null;
     activeExercises = [];
@@ -476,9 +478,7 @@ class AppState extends ChangeNotifier {
     logs.clear();
     history.clear();
     xp = 0;
-    streak = 0;
-    shields = 1;
-    lastWorkoutDate = null;
+    _applyConsistency(); // leere Logs -> Streak 0, Schild 1, Start null
     save();
     notifyListeners();
   }
@@ -507,8 +507,6 @@ class AppState extends ChangeNotifier {
       ));
     }
 
-    final replay = _replayStreak(rebuiltLogs);
-
     history
       ..clear()
       ..addAll(rebuiltHistory);
@@ -516,38 +514,7 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(rebuiltLogs);
     xp = totalXp;
-    streak = replay.streak;
-    shields = replay.shields;
-    lastWorkoutDate = rebuiltLogs.isNotEmpty ? rebuiltLogs.last.date : null;
-  }
-
-  // Streak + Schilde aus einer chronologischen Logs-Liste neu aufbauen.
-  // Gleiche Regeln wie der Live-Pfad in finishWorkout — eine Quelle der Wahrheit
-  // fuer Replay (deleteLog) und CSV-Import.
-  static ({int streak, int shields}) _replayStreak(List<WorkoutLog> chronoLogs) {
-    int newStreak = 0;
-    int newShields = 1;
-    DateTime? lastDay;
-    for (final log in chronoLogs) {
-      final day = DateTime(log.date.year, log.date.month, log.date.day);
-      if (lastDay == null) {
-        newStreak = 1;
-      } else {
-        final days = day.difference(lastDay).inDays;
-        if (days == 0) {
-          // selber Tag
-        } else if (days <= 3) {
-          newStreak++;
-        } else if (newShields > 0) {
-          newShields--;
-          newStreak++;
-        } else {
-          newStreak = 1;
-        }
-      }
-      lastDay = day;
-    }
-    return (streak: newStreak, shields: newShields);
+    _applyConsistency();
   }
 
   // ---- Hevy CSV Import ----
@@ -627,6 +594,7 @@ class AppState extends ChangeNotifier {
     if (sessions.isEmpty) return null;
 
     final bestEst1RM = <String, double>{};
+    final muscleByName = _muscleByExercise;
     int totalXp = 0;
     final newHistory = <CompletedSet>[];
     final newLogs = <WorkoutLog>[];
@@ -642,10 +610,12 @@ class AppState extends ChangeNotifier {
 
       final sessionSets = <CompletedSet>[];
       for (final st in (s['rawSets'] as List)) {
+        final exName = st['exercise'] as String;
         sessionSets.add(CompletedSet(
-          exerciseName: st['exercise'] as String,
+          exerciseName: exName,
           weight: st['weight'] as double,
           reps: st['reps'] as int,
+          muscle: muscleByName[exName],
           date: start,
           isWarmup: st['isWarmup'] as bool,
         ));
@@ -664,8 +634,6 @@ class AppState extends ChangeNotifier {
       ));
     }
 
-    final replay = _replayStreak(newLogs);
-
     history
       ..clear()
       ..addAll(newHistory);
@@ -673,9 +641,7 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(newLogs);
     xp = totalXp;
-    streak = replay.streak;
-    shields = replay.shields;
-    lastWorkoutDate = newLogs.last.date;
+    _applyConsistency();
     save();
     notifyListeners();
 
@@ -683,7 +649,7 @@ class AppState extends ChangeNotifier {
       'sessions': sessions.length,
       'sets': newHistory.length,
       'xp': totalXp,
-      'streak': replay.streak,
+      'streak': streak,
     };
   }
 
