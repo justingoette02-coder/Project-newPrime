@@ -192,3 +192,101 @@ class SessionScorer {
     return SessionScore(xp, prs);
   }
 }
+
+/// Bestimmt den als Naechstes faelligen Trainingstag eines Plans aus der
+/// Historie: eins nach dem zuletzt absolvierten Tag, rotierend durch die
+/// Plan-Reihenfolge. Kein passendes Log (leere/fremde Historie) -> Tag 0.
+class Rotation {
+  static int nextSessionIndex(
+    List<WorkoutLog> logs,
+    List<SessionTemplate> sessions,
+  ) {
+    if (sessions.isEmpty) return 0;
+    final names = [for (final s in sessions) s.name];
+    for (int i = logs.length - 1; i >= 0; i--) {
+      final idx = names.indexOf(logs[i].sessionName);
+      if (idx >= 0) return (idx + 1) % sessions.length;
+    }
+    return 0;
+  }
+}
+
+/// Ergebnis der Konsistenz-Auswertung: Streak in **Tagen**, Start des Laufs
+/// und verbleibende Gnadentage (Schilde).
+class ConsistencyState {
+  final int streakDays;
+  final DateTime? streakStart;
+  final int shields;
+  final DateTime? lastDay;
+  const ConsistencyState(
+      this.streakDays, this.streakStart, this.shields, this.lastDay);
+}
+
+/// EINZIGE Quelle der Wahrheit fuer Streak (in Tagen) und Gnadentage.
+/// Streak = vergangene Tage des aktuellen Konsistenz-Laufs (BAUPLAN §5).
+/// - Luecke <= [graceMaxGapDays]: Lauf laeuft weiter.
+/// - Groessere Luecke: ein Schild ueberbrueckt sie; ohne Schild -> Reset.
+/// - Schilde wachsen um 1 je [shieldRegenDays] (ein Gnadentag pro Woche),
+///   gedeckelt auf [maxShields]; jeder neue Lauf startet mit einem Schild.
+class StreakPolicy {
+  static const int graceMaxGapDays = 3;
+  static const int maxShields = 1;
+  static const int shieldRegenDays = 7;
+
+  static ConsistencyState replay(List<DateTime> dates) {
+    final days = dates.map((d) => DateTime(d.year, d.month, d.day)).toList()
+      ..sort();
+    final uniq = <DateTime>[];
+    for (final d in days) {
+      if (uniq.isEmpty || uniq.last != d) uniq.add(d);
+    }
+    if (uniq.isEmpty) return const ConsistencyState(0, null, 1, null);
+
+    DateTime runStart = uniq.first;
+    DateTime shieldAnchor = uniq.first;
+    int shields = 1;
+
+    for (int i = 1; i < uniq.length; i++) {
+      // Woechentlicher Schild-Nachschub seit dem letzten Anker.
+      final weeks = uniq[i].difference(shieldAnchor).inDays ~/ shieldRegenDays;
+      if (weeks > 0) {
+        final grown = shields + weeks;
+        shields = grown > maxShields ? maxShields : grown;
+        shieldAnchor = shieldAnchor.add(Duration(days: weeks * shieldRegenDays));
+      }
+      final gap = uniq[i].difference(uniq[i - 1]).inDays;
+      if (gap <= graceMaxGapDays) {
+        // Lauf laeuft weiter
+      } else if (shields > 0) {
+        shields -= 1; // Gnadentag eingesetzt
+      } else {
+        runStart = uniq[i]; // Reset: neuer Lauf
+        shieldAnchor = uniq[i];
+        shields = 1;
+      }
+    }
+
+    final last = uniq.last;
+    return ConsistencyState(
+        last.difference(runStart).inDays + 1, runStart, shields, last);
+  }
+}
+
+/// Sichtbarer Aura-Abstieg bei laengerer Pause (BAUPLAN §4): die "effektive"
+/// Streak sinkt Tag fuer Tag, sobald die Toleranz ueberschritten ist, sodass
+/// die Aura-Stufe absteigt. Die echte Streak wird erst beim naechsten Workout
+/// neu bestimmt (dort greifen die Schilde).
+class AuraDecay {
+  static int effectiveStreak(
+      int streak, DateTime? lastWorkoutDate, DateTime now) {
+    if (lastWorkoutDate == null) return streak;
+    final daysSince = DateTime(now.year, now.month, now.day)
+        .difference(DateTime(
+            lastWorkoutDate.year, lastWorkoutDate.month, lastWorkoutDate.day))
+        .inDays;
+    final overdue = daysSince - StreakPolicy.graceMaxGapDays;
+    if (overdue <= 0) return streak;
+    final eff = streak - overdue;
+    return eff < 0 ? 0 : eff;
+  }
+}

@@ -158,14 +158,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               key: ObjectKey(set),
               displayNumber: working,
               set: set,
-              onChanged: ({double? weight, int? reps, double? rpe, String? note}) {
+              onChanged: ({double? weight, int? reps, double? rpe, String? tempo, String? note}) {
                 state.updateSet(ei, si,
-                    weight: weight, reps: reps, rpe: rpe, note: note);
+                    weight: weight, reps: reps, rpe: rpe, tempo: tempo, note: note);
               },
               onToggleDone: () {
                 state.toggleSetDone(ei, si);
                 if (ex.sets[si].done) {
-                  _startRest(state.restFor(ex.template), ex.name);
+                  final rest = state.restFor(ex.template);
+                  state.updateSet(ei, si, restSeconds: rest);
+                  _startRest(rest, ex.name);
                 }
               },
               onToggleWarmup: () =>

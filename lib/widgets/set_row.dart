@@ -9,7 +9,8 @@ import '../models/models.dart';
 class SetRow extends StatefulWidget {
   final int displayNumber;
   final SetEntry set;
-  final void Function({double? weight, int? reps, double? rpe, String? note})
+  final void Function(
+          {double? weight, int? reps, double? rpe, String? tempo, String? note})
       onChanged;
   final VoidCallback onToggleDone;
   final VoidCallback onToggleWarmup;
@@ -33,6 +34,7 @@ class _SetRowState extends State<SetRow> {
   late final TextEditingController _weight;
   late final TextEditingController _reps;
   late final TextEditingController _rpe;
+  late final TextEditingController _tempo;
   late final TextEditingController _note;
   bool _noteExpanded = false;
 
@@ -45,8 +47,10 @@ class _SetRowState extends State<SetRow> {
         text: widget.set.reps?.toString() ?? '');
     _rpe = TextEditingController(
         text: widget.set.rpe != null ? _fmt(widget.set.rpe!) : '');
+    _tempo = TextEditingController(text: widget.set.tempo ?? '');
     _note = TextEditingController(text: widget.set.note ?? '');
-    _noteExpanded = widget.set.note != null && widget.set.note!.isNotEmpty;
+    _noteExpanded = (widget.set.note != null && widget.set.note!.isNotEmpty) ||
+        (widget.set.tempo != null && widget.set.tempo!.isNotEmpty);
   }
 
   String _fmt(double v) =>
@@ -57,6 +61,7 @@ class _SetRowState extends State<SetRow> {
     _weight.dispose();
     _reps.dispose();
     _rpe.dispose();
+    _tempo.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -143,26 +148,47 @@ class _SetRowState extends State<SetRow> {
           ),
           if (_noteExpanded)
             Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: TextField(
-                controller: _note,
-                onChanged: (v) => widget.onChanged(note: v),
-                maxLines: 2,
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: 'Notiz...',
-                  hintStyle:
-                      TextStyle(fontSize: 12, color: AppColors.textTertiary),
-                  contentPadding:
-                      EdgeInsets.symmetric(vertical: 6, horizontal: 0),
-                  enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.border)),
-                  focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.aura)),
-                ),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _tempo,
+                    onChanged: (v) => widget.onChanged(tempo: v),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: 'Tempo (z.B. 3-1-1)',
+                      hintStyle: TextStyle(
+                          fontSize: 12, color: AppColors.textTertiary),
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.border)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.aura)),
+                    ),
+                  ),
+                  TextField(
+                    controller: _note,
+                    onChanged: (v) => widget.onChanged(note: v),
+                    maxLines: 2,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: 'Notiz...',
+                      hintStyle: TextStyle(
+                          fontSize: 12, color: AppColors.textTertiary),
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.border)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.aura)),
+                    ),
+                  ),
+                ],
               ),
             ),
         ],

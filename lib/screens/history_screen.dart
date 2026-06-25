@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/app_state.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
+import 'session_detail_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -100,61 +101,66 @@ class HistoryScreen extends StatelessWidget {
     final exercises = _groupByExercise(log.sets);
     final dateLabel = _formatDate(log.date);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(log.sessionName,
-                    style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary)),
-              ),
-              Text(dateLabel,
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.textTertiary)),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => _confirmDeleteLog(context, state, log),
-                behavior: HitTestBehavior.opaque,
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 6, top: 2, bottom: 2),
-                  child: Icon(Icons.delete_outline,
-                      size: 18, color: AppColors.textTertiary),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SessionDetailScreen.log(log))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(log.sessionName,
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _chip(Icons.bolt, '+${log.xpEarned} XP', AppColors.aura),
-              const SizedBox(width: 8),
-              _chip(Icons.fitness_center,
-                  '${log.totalVolume.round()} kg', AppColors.textSecondary),
-              if (log.durationMinutes != null) ...[
-                const SizedBox(width: 8),
-                _chip(Icons.timer_outlined,
-                    '${log.durationMinutes} min', AppColors.textSecondary),
+                Text(dateLabel,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.textTertiary)),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => _confirmDeleteLog(context, state, log),
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 6, top: 2, bottom: 2),
+                    child: Icon(Icons.delete_outline,
+                        size: 18, color: AppColors.textTertiary),
+                  ),
+                ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _chip(Icons.bolt, '+${log.xpEarned} XP', AppColors.aura),
+                const SizedBox(width: 8),
+                _chip(Icons.fitness_center,
+                    '${log.totalVolume.round()} kg', AppColors.textSecondary),
+                if (log.durationMinutes != null) ...[
+                  const SizedBox(width: 8),
+                  _chip(Icons.timer_outlined,
+                      '${log.durationMinutes} min', AppColors.textSecondary),
+                ],
+              ],
+            ),
+            if (exercises.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...exercises.entries.map((e) => _exerciseRow(e.key, e.value)),
             ],
-          ),
-          if (exercises.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ...exercises.entries.map((e) => _exerciseRow(e.key, e.value)),
           ],
-        ],
+        ),
       ),
     );
   }

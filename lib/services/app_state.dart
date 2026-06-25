@@ -1,13 +1,13 @@
-import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import '../data/templates.dart';
 import '../data/hevy_seed.dart';
 import 'gamification.dart';
+import 'local_store.dart';
+import 'hevy_csv_importer.dart';
 
 // Ergebnis eines abgeschlossenen Workouts (fuer die Belohnungs-Anzeige).
 class WorkoutResult {
@@ -28,10 +28,11 @@ class WorkoutResult {
   });
 }
 
-// Zentraler App-Zustand. Wird lokal per shared_preferences gespeichert,
-// damit XP, Streak und Historie das Neuladen/Schliessen ueberleben.
+// Zentraler App-Zustand (Orchestrator). Persistenz laeuft ueber LocalStore,
+// der CSV-Import ueber HevyCsvImporter — AppState selbst kennt weder
+// shared_preferences noch das CSV-Format.
 class AppState extends ChangeNotifier {
-  static const String _storeKey = 'newprime_state_v1';
+  final LocalStore _store = LocalStore();
 
   // Vorgeschlagene (built-in) Programme + eigene (vom Nutzer erstellte).
   List<Program> get suggestedPrograms => Templates.suggested;
@@ -56,6 +57,7 @@ class AppState extends ChangeNotifier {
   int streak = 0;
   int shields = 1;
   DateTime? lastWorkoutDate;
+  DateTime? streakStartDate; // Start des aktuellen Konsistenz-Laufs (Tage-Streak)
   String displayName = 'Athlet';
 
   // Welche Seed-Version zuletzt in diesen lokalen Speicher geschrieben wurde.
@@ -77,7 +79,10 @@ class AppState extends ChangeNotifier {
   double get levelProgress => LevelSystem.levelProgress(xp);
   int get xpIntoLevel => LevelSystem.xpIntoLevel(xp);
   int get xpForNextLevel => LevelSystem.xpForNextLevel(xp);
-  AuraTier get auraTier => AuraTier.forStreak(streak);
+  // Sichtbare Streak fuers Aura-Widget (sinkt bei laengerer Pause -> Abstieg).
+  int get effectiveStreak =>
+      AuraDecay.effectiveStreak(streak, lastWorkoutDate, DateTime.now());
+  AuraTier get auraTier => AuraTier.forStreak(effectiveStreak);
 
   // true, wenn seit dem letzten Workout >= 2 Tage vergangen sind.
   bool get isStreakAtRisk {
@@ -90,9 +95,15 @@ class AppState extends ChangeNotifier {
     return diff >= 2;
   }
 
-  // Naechste geplante Session des aktiven Programms (chronologisch rotierend).
+  // Index des als Naechstes faelligen Trainingstags (aus der Historie
+  // abgeleitet, rotiert durch die Reihenfolge des aktiven Plans).
+  int get nextSessionIndex =>
+      Rotation.nextSessionIndex(logs, activeProgram.sessions);
+
+  // Naechster geplanter Trainingstag: eins nach dem zuletzt absolvierten Tag
+  // dieses Plans. Steht auf der Startseite ("HEUTE").
   SessionTemplate get nextSession =>
-      activeProgram.sessions[logs.length % activeProgram.sessions.length];
+      activeProgram.sessions[nextSessionIndex];
 
   // Name -> Muskelgruppe (aus allen Uebungen aller Programme).
   Map<String, MuscleGroup> get _muscleByExercise {
@@ -114,7 +125,7 @@ class AppState extends ChangeNotifier {
     final map = <MuscleGroup, double>{};
     for (final s in history) {
       if (s.date.isBefore(cutoff) || s.isWarmup) continue;
-      final muscle = byName[s.exerciseName];
+      final muscle = s.muscle ?? byName[s.exerciseName];
       if (muscle == null) continue;
       map[muscle] = (map[muscle] ?? 0) + s.volume;
     }
@@ -190,56 +201,48 @@ class AppState extends ChangeNotifier {
   // ---- Laden & Speichern (lokal) ----
 
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storeKey);
-    if (raw == null) {
-      // Erster Start: echte Hevy-Historie als Seed laden.
+    final persisted = await _store.load();
+    if (persisted == null) {
+      // Erster Start oder beschaedigte Daten: echte Hevy-Historie als Seed.
       _loadEmbeddedSeedData();
       await save();
       notifyListeners();
       return;
     }
-    try {
-      final data = jsonDecode(raw) as Map<String, dynamic>;
-      xp = data['xp'] as int? ?? 0;
-      streak = data['streak'] as int? ?? 0;
-      shields = data['shields'] as int? ?? 1;
-      displayName = data['displayName'] as String? ?? 'Athlet';
-      final lwd = data['lastWorkoutDate'] as String?;
-      lastWorkoutDate = lwd != null ? DateTime.tryParse(lwd) : null;
-      history
-        ..clear()
-        ..addAll((data['history'] as List? ?? [])
-            .map((e) => CompletedSet.fromJson(e as Map<String, dynamic>)));
-      logs
-        ..clear()
-        ..addAll((data['logs'] as List? ?? [])
-            .map((e) => WorkoutLog.fromJson(e as Map<String, dynamic>)));
-      final ro = data['restOverrides'] as Map<String, dynamic>? ?? {};
-      _restOverrides
-        ..clear()
-        ..addAll(ro.map((k, v) => MapEntry(k, v as int)));
-      customPrograms
-        ..clear()
-        ..addAll((data['customPrograms'] as List? ?? [])
-            .map((e) => Program.fromJson(e as Map<String, dynamic>)));
-      selectedProgramName =
-          data['selectedProgramName'] as String? ?? suggestedPrograms.first.name;
-      _appliedSeedVersion = data['seedVersion'] as int? ?? 0;
-
-      // Migration: liegen noch aeltere (Demo-)Daten im Speicher, werden die
-      // echten Hevy-Daten automatisch geladen — ohne dass der Nutzer den
-      // Import-Button tippen muss.
-      if (_appliedSeedVersion < HevySeed.seedVersion) {
-        _loadEmbeddedSeedData();
-        await save();
-      }
-    } catch (_) {
-      // Beschaedigte Daten -> sauberer Neustart mit echten Seed-Daten.
+    _apply(persisted);
+    // Migration: aeltere (Demo-)Daten -> echte Hevy-Daten automatisch laden.
+    if (_appliedSeedVersion < HevySeed.seedVersion) {
       _loadEmbeddedSeedData();
       await save();
     }
+    // Streak/Schilde immer aus den (geladenen) Logs ableiten (deckt Alt-Saves ab).
+    _applyConsistency();
     notifyListeners();
+  }
+
+  // Persistierten Zustand in die Felder uebernehmen.
+  void _apply(PersistedState p) {
+    xp = p.xp;
+    streak = p.streak;
+    shields = p.shields;
+    displayName = p.displayName;
+    lastWorkoutDate = p.lastWorkoutDate;
+    streakStartDate = p.streakStartDate;
+    _appliedSeedVersion = p.seedVersion;
+    _restOverrides
+      ..clear()
+      ..addAll(p.restOverrides);
+    selectedProgramName =
+        p.selectedProgramName ?? suggestedPrograms.first.name;
+    customPrograms
+      ..clear()
+      ..addAll(p.customPrograms);
+    history
+      ..clear()
+      ..addAll(p.history);
+    logs
+      ..clear()
+      ..addAll(p.logs);
   }
 
   // Setzt den Zustand auf die eingebetteten Hevy-Daten (ohne save/notify).
@@ -252,29 +255,38 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(HevySeed.buildLogs());
     xp = HevySeed.seedXp;
-    streak = HevySeed.seedStreak;
-    shields = 0;
-    lastWorkoutDate = DateTime.parse(HevySeed.seedLastWorkoutDate);
     if (displayName == 'Athlet') displayName = 'Justin';
     _appliedSeedVersion = HevySeed.seedVersion;
+    // Streak (Tage) + Schilde aus den Seed-Log-Tagen ableiten.
+    _applyConsistency();
   }
 
-  Future<void> save() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = {
-      'xp': xp,
-      'streak': streak,
-      'shields': shields,
-      'displayName': displayName,
-      'seedVersion': _appliedSeedVersion,
-      'lastWorkoutDate': lastWorkoutDate?.toIso8601String(),
-      'restOverrides': _restOverrides,
-      'selectedProgramName': selectedProgramName,
-      'customPrograms': customPrograms.map((p) => p.toJson()).toList(),
-      'history': history.map((e) => e.toJson()).toList(),
-      'logs': logs.map((e) => e.toJson()).toList(),
-    };
-    await prefs.setString(_storeKey, jsonEncode(data));
+  Future<void> save() => _store.save(_snapshot());
+
+  // Momentaufnahme der persistierten Felder fuer den LocalStore.
+  PersistedState _snapshot() => PersistedState(
+        xp: xp,
+        streak: streak,
+        shields: shields,
+        lastWorkoutDate: lastWorkoutDate,
+        streakStartDate: streakStartDate,
+        displayName: displayName,
+        seedVersion: _appliedSeedVersion,
+        restOverrides: _restOverrides,
+        selectedProgramName: selectedProgramName,
+        customPrograms: customPrograms,
+        history: history,
+        logs: logs,
+      );
+
+  // Streak (Tage), Streak-Start und Schilde aus den Logs ableiten — EINE
+  // Quelle der Wahrheit (genutzt von finishWorkout, Replay, Import, Seed, Load).
+  void _applyConsistency() {
+    final c = StreakPolicy.replay([for (final l in logs) l.date]);
+    streak = c.streakDays;
+    streakStartDate = c.streakStart;
+    shields = c.shields;
+    lastWorkoutDate = c.lastDay;
   }
 
   // ---- Session-Ablauf ----
@@ -387,6 +399,10 @@ class AppState extends ChangeNotifier {
           weight: s.weight!,
           reps: s.reps!,
           rpe: s.rpe,
+          restSeconds: s.restSeconds,
+          tempo: s.tempo,
+          note: s.note,
+          muscle: ex.template.muscle,
           date: now,
           isWarmup: s.isWarmup,
         ));
@@ -403,31 +419,6 @@ class AppState extends ChangeNotifier {
     final beforeLevel = level;
     xp += xpEarned;
 
-    // Trainings-Streak mit Shield-System:
-    // - Gleicher Tag: unveraendert
-    // - <= 3 Tage Pause: Streak erhoehen
-    // - > 3 Tage Pause, Schild vorhanden: Schild verbrauchen, Streak erhoehen
-    // - > 3 Tage Pause, kein Schild: Reset auf 1
-    if (lastWorkoutDate != null) {
-      final days = DateTime(now.year, now.month, now.day)
-          .difference(DateTime(lastWorkoutDate!.year, lastWorkoutDate!.month,
-              lastWorkoutDate!.day))
-          .inDays;
-      if (days == 0) {
-        // zweites Workout am selben Tag — Streak unveraendert
-      } else if (days <= 3) {
-        streak++;
-      } else if (shields > 0) {
-        shields--;
-        streak++;
-      } else {
-        streak = 1;
-      }
-    } else {
-      streak = 1;
-    }
-    lastWorkoutDate = now;
-
     history.addAll(completed);
     logs.add(WorkoutLog(
       sessionName: activeTemplate?.name ?? 'Workout',
@@ -436,6 +427,10 @@ class AppState extends ChangeNotifier {
       xpEarned: xpEarned,
       durationMinutes: durationMinutes,
     ));
+
+    // Streak (Tage) + Schilde aus den Logs ableiten — eine Quelle der Wahrheit
+    // (gleiche Policy wie Replay/Import/Seed).
+    _applyConsistency();
 
     activeTemplate = null;
     activeExercises = [];
@@ -470,9 +465,7 @@ class AppState extends ChangeNotifier {
     logs.clear();
     history.clear();
     xp = 0;
-    streak = 0;
-    shields = 1;
-    lastWorkoutDate = null;
+    _applyConsistency(); // leere Logs -> Streak 0, Schild 1, Start null
     save();
     notifyListeners();
   }
@@ -501,8 +494,6 @@ class AppState extends ChangeNotifier {
       ));
     }
 
-    final replay = _replayStreak(rebuiltLogs);
-
     history
       ..clear()
       ..addAll(rebuiltHistory);
@@ -510,38 +501,7 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(rebuiltLogs);
     xp = totalXp;
-    streak = replay.streak;
-    shields = replay.shields;
-    lastWorkoutDate = rebuiltLogs.isNotEmpty ? rebuiltLogs.last.date : null;
-  }
-
-  // Streak + Schilde aus einer chronologischen Logs-Liste neu aufbauen.
-  // Gleiche Regeln wie der Live-Pfad in finishWorkout — eine Quelle der Wahrheit
-  // fuer Replay (deleteLog) und CSV-Import.
-  static ({int streak, int shields}) _replayStreak(List<WorkoutLog> chronoLogs) {
-    int newStreak = 0;
-    int newShields = 1;
-    DateTime? lastDay;
-    for (final log in chronoLogs) {
-      final day = DateTime(log.date.year, log.date.month, log.date.day);
-      if (lastDay == null) {
-        newStreak = 1;
-      } else {
-        final days = day.difference(lastDay).inDays;
-        if (days == 0) {
-          // selber Tag
-        } else if (days <= 3) {
-          newStreak++;
-        } else if (newShields > 0) {
-          newShields--;
-          newStreak++;
-        } else {
-          newStreak = 1;
-        }
-      }
-      lastDay = day;
-    }
-    return (streak: newStreak, shields: newShields);
+    _applyConsistency();
   }
 
   // ---- Hevy CSV Import ----
@@ -570,96 +530,30 @@ class AppState extends ChangeNotifier {
     if (picked == null || picked.files.isEmpty) return null;
     final bytes = picked.files.first.bytes;
     if (bytes == null) return null;
-    return _applyHevyCsvBytes(bytes);
+    final sessions =
+        HevyCsvImporter.parse(bytes, muscleByName: _muscleByExercise);
+    if (sessions == null || sessions.isEmpty) return null;
+    return _applyImportedSessions(sessions);
   }
 
-  Map<String, int>? _applyHevyCsvBytes(List<int> bytes) {
-    final content = utf8.decode(bytes, allowMalformed: true);
-    final rows = _parseCsv(content);
-    if (rows.length < 2) return null;
-
-    final header = rows.first;
-    int col(String name) => header.indexOf(name);
-    final cTitle = col('title');
-    final cStart = col('start_time');
-    final cEnd = col('end_time');
-    final cExercise = col('exercise_title');
-    final cSetType = col('set_type');
-    final cWeight = col('weight_kg');
-    final cReps = col('reps');
-    if ([cTitle, cStart, cEnd, cExercise, cSetType, cWeight, cReps]
-        .any((i) => i < 0)) {
-      return null;
-    }
-
-    final sessionsMap = <String, Map<String, dynamic>>{};
-    for (int i = 1; i < rows.length; i++) {
-      final r = rows[i];
-      if (r.length <= cReps) continue;
-      final reps = int.tryParse(r[cReps].trim()) ?? 0;
-      if (reps <= 0) continue;
-      final key = '${r[cTitle]}|${r[cStart]}';
-      sessionsMap.putIfAbsent(key, () => {
-            'title': r[cTitle],
-            'start': _parseHevyDate(r[cStart]),
-            'end': _parseHevyDate(r[cEnd]),
-            'rawSets': <Map<String, dynamic>>[],
-          });
-      (sessionsMap[key]!['rawSets'] as List).add({
-        'exercise': r[cExercise],
-        'weight': double.tryParse(r[cWeight].trim()) ?? 0.0,
-        'reps': reps,
-        'isWarmup': r[cSetType].trim().toLowerCase() == 'warmup',
-      });
-    }
-
-    final sessions = sessionsMap.values
-        .where((s) => s['start'] != null)
-        .toList()
-      ..sort((a, b) =>
-          (a['start'] as DateTime).compareTo(b['start'] as DateTime));
-    if (sessions.isEmpty) return null;
-
+  // Geparste Sessions in den Zustand uebernehmen (Scoring + Streak + speichern).
+  Map<String, int> _applyImportedSessions(List<ImportedSession> sessions) {
     final bestEst1RM = <String, double>{};
     int totalXp = 0;
     final newHistory = <CompletedSet>[];
     final newLogs = <WorkoutLog>[];
-
     for (final s in sessions) {
-      final start = s['start'] as DateTime;
-      final endDt = s['end'] as DateTime?;
-      int? durMin;
-      if (endDt != null) {
-        final d = endDt.difference(start).inMinutes;
-        if (d >= 1 && d <= 300) durMin = d;
-      }
-
-      final sessionSets = <CompletedSet>[];
-      for (final st in (s['rawSets'] as List)) {
-        sessionSets.add(CompletedSet(
-          exerciseName: st['exercise'] as String,
-          weight: st['weight'] as double,
-          reps: st['reps'] as int,
-          date: start,
-          isWarmup: st['isWarmup'] as bool,
-        ));
-      }
-      newHistory.addAll(sessionSets);
-
-      // Gleiche Bewertung wie Live-Logging und Replay.
-      final score = SessionScorer.scoreSession(sessionSets, bestEst1RM);
+      newHistory.addAll(s.sets);
+      final score = SessionScorer.scoreSession(s.sets, bestEst1RM);
       totalXp += score.xp;
       newLogs.add(WorkoutLog(
-        sessionName: s['title'] as String,
-        date: start,
-        sets: sessionSets,
+        sessionName: s.title,
+        date: s.start,
+        sets: s.sets,
         xpEarned: score.xp,
-        durationMinutes: durMin,
+        durationMinutes: s.durationMinutes,
       ));
     }
-
-    final replay = _replayStreak(newLogs);
-
     history
       ..clear()
       ..addAll(newHistory);
@@ -667,59 +561,15 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(newLogs);
     xp = totalXp;
-    streak = replay.streak;
-    shields = replay.shields;
-    lastWorkoutDate = newLogs.last.date;
+    _applyConsistency();
     save();
     notifyListeners();
-
     return {
       'sessions': sessions.length,
       'sets': newHistory.length,
       'xp': totalXp,
-      'streak': replay.streak,
+      'streak': streak,
     };
   }
 
-  static List<List<String>> _parseCsv(String content) {
-    final rows = <List<String>>[];
-    for (final line in content.split(RegExp(r'\r?\n'))) {
-      if (line.trim().isEmpty) continue;
-      final fields = <String>[];
-      var inQuotes = false;
-      final field = StringBuffer();
-      for (int i = 0; i < line.length; i++) {
-        final c = line[i];
-        if (c == '"') {
-          inQuotes = !inQuotes;
-        } else if (c == ',' && !inQuotes) {
-          fields.add(field.toString());
-          field.clear();
-        } else {
-          field.write(c);
-        }
-      }
-      fields.add(field.toString());
-      rows.add(fields);
-    }
-    return rows;
-  }
-
-  static const _hevyMonths = {
-    'Jan': 1, 'Feb': 2, 'März': 3, 'Apr': 4,
-    'Mai': 5, 'Juni': 6, 'Juli': 7, 'Aug': 8,
-    'Sept': 9, 'Okt': 10, 'Nov': 11, 'Dez': 12,
-  };
-
-  static DateTime? _parseHevyDate(String s) {
-    final m =
-        RegExp(r'(\d+)\s+(\w+)\s+(\d+),\s+(\d+):(\d+)').firstMatch(s.trim());
-    if (m == null) return null;
-    final month = _hevyMonths[m.group(2)];
-    if (month == null) return null;
-    return DateTime(
-      int.parse(m.group(3)!), month, int.parse(m.group(1)!),
-      int.parse(m.group(4)!), int.parse(m.group(5)!),
-    );
-  }
 }

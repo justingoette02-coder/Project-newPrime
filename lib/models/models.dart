@@ -168,6 +168,10 @@ class CompletedSet {
   final double weight;
   final int reps;
   final double? rpe;
+  final int? restSeconds;
+  final String? tempo;
+  final String? note;
+  final MuscleGroup? muscle;
   final DateTime date;
   final bool isWarmup;
 
@@ -177,6 +181,10 @@ class CompletedSet {
     required this.reps,
     required this.date,
     this.rpe,
+    this.restSeconds,
+    this.tempo,
+    this.note,
+    this.muscle,
     this.isWarmup = false,
   });
 
@@ -190,6 +198,10 @@ class CompletedSet {
         'weight': weight,
         'reps': reps,
         'rpe': rpe,
+        'restSeconds': restSeconds,
+        'tempo': tempo,
+        'note': note,
+        'muscle': muscle?.name,
         'date': date.toIso8601String(),
         'isWarmup': isWarmup,
       };
@@ -199,6 +211,12 @@ class CompletedSet {
         weight: (j['weight'] as num).toDouble(),
         reps: j['reps'] as int,
         rpe: (j['rpe'] as num?)?.toDouble(),
+        restSeconds: j['restSeconds'] as int?,
+        tempo: j['tempo'] as String?,
+        note: j['note'] as String?,
+        muscle: j['muscle'] != null
+            ? MuscleGroup.values.byName(j['muscle'] as String)
+            : null,
         date: DateTime.parse(j['date'] as String),
         isWarmup: j['isWarmup'] as bool? ?? false,
       );

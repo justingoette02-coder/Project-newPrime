@@ -9,6 +9,7 @@ import '../widgets/aura_eyes.dart';
 import 'workout_screen.dart';
 import 'history_screen.dart';
 import 'program_builder_screen.dart';
+import 'session_detail_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -284,8 +285,9 @@ class HomeScreen extends StatelessWidget {
       children: [
         _progressBar(
           label: 'AURA',
-          trailing: nextAt == null ? 'MAX' : '${state.streak} / $nextAt',
-          value: tier.progress(state.streak),
+          trailing:
+              nextAt == null ? 'MAX' : '${state.effectiveStreak} / $nextAt',
+          value: tier.progress(state.effectiveStreak),
           color: auraColor,
         ),
         const SizedBox(height: 14),
@@ -410,45 +412,63 @@ class HomeScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('HEUTE',
-                  style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 1,
-                      color: AppColors.aura,
-                      fontWeight: FontWeight.w500)),
-              Text('${session.exercises.length} Uebungen',
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.textTertiary)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(session.name,
-              style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
-          ...session.exercises.take(3).map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
+          // Tipp auf den Info-Bereich -> Tag-Uebersicht (Uebungen + letzte Stats).
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SessionDetailScreen.planned(session))),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(e.name,
-                        style: const TextStyle(
-                            fontSize: 13, color: AppColors.textPrimary)),
-                    Text('${e.targetSets} x ${e.repMin}-${e.repMax}',
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.textTertiary)),
+                    const Text('HEUTE',
+                        style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 1,
+                            color: AppColors.aura,
+                            fontWeight: FontWeight.w500)),
+                    Row(
+                      children: [
+                        Text('${session.exercises.length} Uebungen',
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.textTertiary)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right,
+                            size: 16, color: AppColors.textTertiary),
+                      ],
+                    ),
                   ],
                 ),
-              )),
-          if (session.exercises.length > 3)
-            Text('+ ${session.exercises.length - 3} weitere',
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textTertiary)),
+                const SizedBox(height: 6),
+                Text(session.name,
+                    style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                const SizedBox(height: 12),
+                ...session.exercises.take(3).map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(e.name,
+                              style: const TextStyle(
+                                  fontSize: 13, color: AppColors.textPrimary)),
+                          Text('${e.targetSets} x ${e.repMin}-${e.repMax}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textTertiary)),
+                        ],
+                      ),
+                    )),
+                if (session.exercises.length > 3)
+                  Text('+ ${session.exercises.length - 3} weitere',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textTertiary)),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -474,13 +494,20 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // Session starten + zum Workout navigieren.
-  void _startSession(
-      BuildContext context, AppState state, SessionTemplate session) {
-    state.startSession(session);
-    Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const WorkoutScreen()));
-  }
+  // Kleines Badge fuer den als Naechstes faelligen Trainingstag.
+  Widget _nextBadge() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: AppColors.aura,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Text('NAECHSTES',
+            style: TextStyle(
+                fontSize: 9,
+                letterSpacing: 0.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.bg)),
+      );
 
   // Aktiver Plan + frei waehlbare Trainingstage.
   Widget _programSection(BuildContext context, AppState state) {
@@ -523,13 +550,17 @@ class HomeScreen extends StatelessWidget {
             children: [
               ...List.generate(program.sessions.length, (i) {
                 final s = program.sessions[i];
+                final isNext = i == state.nextSessionIndex;
                 return Column(
                   children: [
                     if (i > 0)
                       const Divider(
                           height: 1, color: AppColors.border, thickness: 1),
                     InkWell(
-                      onTap: () => _startSession(context, state, s),
+                      onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  SessionDetailScreen.planned(s))),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 12),
@@ -540,11 +571,22 @@ class HomeScreen extends StatelessWidget {
                                 crossAxisAlignment:
                                     CrossAxisAlignment.start,
                                 children: [
-                                  Text(s.name,
-                                      style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textPrimary)),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(s.name,
+                                            style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.textPrimary),
+                                            overflow: TextOverflow.ellipsis),
+                                      ),
+                                      if (isNext) ...[
+                                        const SizedBox(width: 8),
+                                        _nextBadge(),
+                                      ],
+                                    ],
+                                  ),
                                   const SizedBox(height: 2),
                                   Text('${s.exercises.length} Uebungen',
                                       style: const TextStyle(
@@ -553,8 +595,8 @@ class HomeScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            const Icon(Icons.play_circle_outline,
-                                size: 22, color: AppColors.aura),
+                            const Icon(Icons.chevron_right,
+                                size: 22, color: AppColors.textTertiary),
                           ],
                         ),
                       ),

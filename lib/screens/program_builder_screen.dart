@@ -179,7 +179,21 @@ class _ProgramBuilderScreenState extends State<ProgramBuilderScreen> {
                     const TextStyle(fontSize: 12, color: AppColors.danger)),
           ],
           const SizedBox(height: 16),
-          ...List.generate(_days.length, (i) => _dayCard(i)),
+          // Tage per Long-Press umsortieren — die Reihenfolge ist die
+          // Rotations-Reihenfolge auf der Startseite.
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _days.length,
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) newIndex--;
+                final d = _days.removeAt(oldIndex);
+                _days.insert(newIndex, d);
+              });
+            },
+            itemBuilder: (context, i) => _dayCard(i),
+          ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: _addDay,
@@ -199,6 +213,7 @@ class _ProgramBuilderScreenState extends State<ProgramBuilderScreen> {
   Widget _dayCard(int i) {
     final day = _days[i];
     return Container(
+      key: ObjectKey(day),
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -211,6 +226,10 @@ class _ProgramBuilderScreenState extends State<ProgramBuilderScreen> {
         children: [
           Row(
             children: [
+              // Lange auf die Karte druecken zum Umsortieren (Reihenfolge = Rotation).
+              const Icon(Icons.drag_indicator,
+                  size: 18, color: AppColors.textTertiary),
+              const SizedBox(width: 6),
               Expanded(
                 child: GestureDetector(
                   onTap: () => _renameDay(i),
